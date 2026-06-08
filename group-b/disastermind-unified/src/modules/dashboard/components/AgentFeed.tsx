@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
-import type { Message, WebSocketConnectionState } from '../../../lib/disasterApi'
+import { formatAgentName, extractMessageText, priorityToSeverity } from '../../../lib/disasterApi'
+import type { AgentMessage, WSConnectionState } from '../../../lib/disasterApi'
 
 type AgentEntry = {
   id: string
@@ -13,8 +14,8 @@ type AgentEntry = {
 }
 
 type AgentFeedProps = {
-  connectionState: WebSocketConnectionState
-  incomingMessage: Message | null
+  connectionState: WSConnectionState
+  incomingMessage: AgentMessage | null
   customEntry?: {
     agent: string
     summary: string
@@ -144,10 +145,11 @@ const agentClass: Record<string, string> = {
   'EVAC-AI': 'blue',
 }
 
-const connectionLabels: Record<WebSocketConnectionState, string> = {
+const connectionLabels: Record<WSConnectionState, string> = {
   connected: 'LIVE',
   reconnecting: 'RECONNECTING',
   offline: 'OFFLINE — SIMULATION',
+  connecting: 'CONNECTING...',
 }
 
 function formatLiveTime() {
@@ -165,7 +167,7 @@ function formatMessageTime(timestamp: string) {
     return formatLiveTime()
   }
 
-  return parsed.toLocaleTimeString('en-GB', {
+  return parsed.toLocaleTimeString('en-IN', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -173,42 +175,14 @@ function formatMessageTime(timestamp: string) {
   })
 }
 
-function formatAgentName(sender: string) {
-  const normalized = sender.replace(/_agent$/i, '').replace(/_/g, '-').toUpperCase()
-  return `${normalized}-AI`
-}
-
-function mapPriorityToSeverity(priority: number): AgentEntry['severity'] {
-  if (priority === 1) return 'critical'
-  if (priority === 2) return 'high'
-  if (priority === 3) return 'medium'
-  if (priority === 4) return 'low'
-  return 'info'
-}
-
-function textFromPayload(payload: Record<string, unknown>, reasoning: string[]) {
-  const summary = payload.summary
-  const action = payload.action
-
-  if (typeof summary === 'string' && summary.trim()) {
-    return summary
-  }
-
-  if (typeof action === 'string' && action.trim()) {
-    return action
-  }
-
-  return reasoning[0] ?? 'Group A message received'
-}
-
-function mapMessageToEntry(message: Message): AgentEntry {
+function mapMessageToEntry(message: AgentMessage): AgentEntry {
   return {
     id: message.id,
     time: formatMessageTime(message.timestamp),
     agent: formatAgentName(message.sender),
-    summary: textFromPayload(message.payload, message.reasoning),
+    summary: extractMessageText(message),
     detail: message.reasoning.length > 0 ? message.reasoning.join(' → ') : 'No reasoning supplied by Group A.',
-    severity: mapPriorityToSeverity(message.priority),
+    severity: priorityToSeverity(message.priority),
     isNew: true,
   }
 }

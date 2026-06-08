@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, X } from 'lucide-react'
 import {
-  approveEscalation,
-  fetchEscalations,
-  rejectEscalation,
+  disasterApi,
   type Escalation,
-  type Message,
+  type AgentMessage,
 } from '../../../lib/disasterApi'
 
 type EscalationState = 'pending' | 'approved' | 'overridden' | 'hidden'
@@ -20,7 +18,7 @@ type QueueItem = {
 
 type EscalationQueueProps = {
   backendOnline: boolean
-  incomingMessage: Message | null
+  incomingMessage: AgentMessage | null
   timelineEscalations?: QueueItem[]
   onApproveZone7?: () => void
   zone7OverrideState?: 'pending' | 'auto-executing' | 'approved' | 'overridden' | 'removed'
@@ -56,7 +54,7 @@ function payloadText(payload: Record<string, unknown>, keys: string[], fallback:
   return fallback
 }
 
-function escalationIdFromMessage(message: Message) {
+function escalationIdFromMessage(message: AgentMessage) {
   const payloadId = message.payload.escalation_id ?? message.payload.escalationId ?? message.payload.id
   if (typeof payloadId === 'string' && payloadId.trim()) {
     return payloadId
@@ -69,7 +67,7 @@ function escalationIdFromMessage(message: Message) {
   return message.id
 }
 
-function messageToQueueItem(message: Message, decisionRequiredBy?: string): QueueItem {
+function messageToQueueItem(message: AgentMessage, decisionRequiredBy?: string): QueueItem {
   const fallbackSummary = message.reasoning[0] ?? 'Group A escalation requires commander review.'
   const title = payloadText(message.payload, ['title', 'summary', 'action'], 'GROUP A ESCALATION')
   const situation = payloadText(message.payload, ['situation', 'summary', 'description'], fallbackSummary)
@@ -130,7 +128,8 @@ export function EscalationQueue({
     let cancelled = false
 
     const loadEscalations = async () => {
-      const pendingEscalations = (await fetchEscalations())
+      const result = (await disasterApi.escalations()) ?? []
+      const pendingEscalations = result
         .filter((item) => item.status === 'pending')
         .map(escalationToQueueItem)
 
@@ -193,7 +192,7 @@ export function EscalationQueue({
       return
     }
 
-    if (await approveEscalation(item.id)) {
+    if (await disasterApi.approveEscalation(item.id)) {
       resolveEscalation(item.id, 'approved')
     }
   }
@@ -209,7 +208,7 @@ export function EscalationQueue({
       return
     }
 
-    if (await rejectEscalation(item.id, reason)) {
+    if (await disasterApi.rejectEscalation(item.id, reason)) {
       resolveEscalation(item.id, 'overridden')
     }
   }

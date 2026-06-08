@@ -1,144 +1,251 @@
-import { config } from './config'
+import { config } from './config';
 
-const API_BASE_URL = config.api.baseUrl
-const WS_URL = config.api.wsUrl
+// ─── TYPES ────────────────────────────────────────────────────────────────────
 
-export interface Message {
-  id: string
-  sender: string
-  recipient: string
-  type: 'alert' | 'instruction' | 'query' | 'acknowledgement' | 'escalation' | string
-  priority: 1 | 2 | 3 | 4 | 5 | number
-  payload: Record<string, unknown>
-  reasoning: string[]
-  ttl_seconds: number
-  topic: string
-  incident_id: string
-  module: string
-  escalation_trigger: unknown
-  timestamp: string
+export type MessageType =
+  | 'alert'
+  | 'instruction'
+  | 'query'
+  | 'acknowledgement'
+  | 'escalation';
+
+export type MessagePriority = 1 | 2 | 3 | 4 | 5;
+// 1 = CRITICAL, 2 = HIGH, 3 = MEDIUM, 4 = LOW, 5 = INFO
+
+export type DisasterModule = 'A' | 'B' | 'C' | 'ALL';
+
+export interface AgentMessage {
+  id: string;
+  sender: string;
+  recipient: string;
+  type: MessageType;
+  priority: MessagePriority;
+  payload: Record<string, unknown>;
+  reasoning: string[];
+  ttl_seconds: number;
+  topic: string;
+  incident_id: string;
+  module: DisasterModule;
+  escalation_trigger: string | null;
+  timestamp: string;
 }
+
+export type EscalationStatus = 'pending' | 'approved' | 'rejected';
 
 export interface Escalation {
-  id: string
-  message: Message
-  status: 'pending' | 'approved' | 'rejected' | string
-  created_at: string
-  decision_required_by: string
+  id: string;
+  message: AgentMessage;
+  status: EscalationStatus;
+  created_at: string;
+  decision_required_by: string;
 }
 
-export type WebSocketConnectionState = 'connected' | 'reconnecting' | 'offline'
+export interface HealthStatus {
+  status: 'ok' | 'degraded' | 'down';
+  timestamp: string;
+  agents_active?: number;
+  messages_processed?: number;
+}
 
+export interface TopicStats {
+  topic: string;
+  message_count: number;
+  last_message_at: string;
+}
+
+// ─── HTTP HELPERS ─────────────────────────────────────────────────────────────
+
+const BASE = config.api.baseUrl;
+
+async function get<T>(path: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json() as T;
+  } catch (err) {
+    console.warn(`[API] GET ${path} failed:`, err);
+    return null;
+  }
+}
+
+async function post<T>(path: string, body?: unknown): Promise<T | null> {
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json() as T;
+  } catch (err) {
+    console.warn(`[API] POST ${path} failed:`, err);
+    return null;
+  }
+}
+
+// ─── API METHODS ──────────────────────────────────────────────────────────────
+
+export const disasterApi = {
+
+  /** Check if Group A backend is reachable */
+  async health(): Promise<HealthStatus | null> {
+    return get<HealthStatus>('/health');
+  },
+
+  /** Get active message counts per topic */
+  async topics(): Promise<TopicStats[] | null> {
+    return get<TopicStats[]>('/topics');
+  },
+
+  /** Get recent message bus entries */
+  async incidents(limit = 50): Promise<AgentMessage[] | null> {
+    return get<AgentMessage[]>(`/incidents?limit=${limit}`);
+  },
+
+  /** Get all pending escalations */
+  async escalations(): Promise<Escalation[] | null> {
+    return get<Escalation[]>('/escalations');
+  },
+
+  /** Approve an escalation */
+  async approveEscalation(id: string): Promise<boolean> {
+    const res = await post(`/escalations/${id}/approve`);
+    return res !== null;
+  },
+
+  /** Reject an escalation with a reason */
+  async rejectEscalation(id: string, reason: string): Promise<boolean> {
+    const res = await post(`/escalations/${id}/reject`, { reason });
+    return res !== null;
+  },
+};
+
+// ─── WEBSOCKET CLIENT ─────────────────────────────────────────────────────────
+
+export type WSConnectionState =
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'offline';
+
+export interface WSClient {
+  connectionState: WSConnectionState;
+  disconnect: () => void;
+}
+
+/**
+ * Connect to Group A's WebSocket stream.
+ * Auto-reconnects every 3 seconds on disconnect.
+ * Returns a cleanup function — call it on component unmount.
+ *
+ * Usage:
+ *   const cleanup = connectWebSocket(
+ *     (msg) => console.log('new message', msg),
+ *     (state) => setConnectionState(state)
+ *   );
+ *   return () => cleanup();
+ */
 export function connectWebSocket(
-  onMessage: (msg: Message) => void,
-  onStateChange?: (state: WebSocketConnectionState) => void,
+  onMessage: (msg: AgentMessage) => void,
+  onStateChange?: (state: WSConnectionState) => void
 ): () => void {
-  let socket: WebSocket | null = null
-  let reconnectTimer: number | undefined
-  let closedByClient = false
+  let ws: WebSocket | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let destroyed = false;
 
-  const connect = () => {
-    if (closedByClient) {
-      return
-    }
+  function setState(state: WSConnectionState) {
+    onStateChange?.(state);
+  }
 
-    onStateChange?.('reconnecting')
+  function connect() {
+    if (destroyed) return;
+
+    setState('connecting');
 
     try {
-      socket = new WebSocket(WS_URL)
-    } catch (error) {
-      console.log('Group A WebSocket unavailable; using simulation mode.', error)
-      onStateChange?.('offline')
-      reconnectTimer = window.setTimeout(connect, 3000)
-      return
-    }
+      ws = new WebSocket(config.api.wsUrl);
 
-    socket.onopen = () => {
-      onStateChange?.('connected')
-    }
+      ws.onopen = () => {
+        setState('connected');
+        console.log('[WS] Connected to Group A');
+      };
 
-    socket.onmessage = (event) => {
-      try {
-        onMessage(JSON.parse(event.data) as Message)
-      } catch (error) {
-        console.log('Ignored malformed Group A WebSocket message.', error)
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data) as AgentMessage;
+          onMessage(msg);
+        } catch (err) {
+          console.warn('[WS] Failed to parse message:', err);
+        }
+      };
+
+      ws.onclose = () => {
+        if (destroyed) return;
+        setState('reconnecting');
+        console.log('[WS] Disconnected — reconnecting in 3s');
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+
+      ws.onerror = () => {
+        setState('offline');
+        ws?.close();
+      };
+    } catch {
+      setState('offline');
+      if (!destroyed) {
+        reconnectTimer = setTimeout(connect, 3000);
       }
-    }
-
-    socket.onerror = (error) => {
-      console.log('Group A WebSocket unavailable; using simulation mode.', error)
-      onStateChange?.('offline')
-    }
-
-    socket.onclose = () => {
-      if (closedByClient) {
-        return
-      }
-
-      onStateChange?.('offline')
-      reconnectTimer = window.setTimeout(connect, 3000)
     }
   }
 
-  connect()
+  connect();
 
+  // Return cleanup function
   return () => {
-    closedByClient = true
-    if (reconnectTimer !== undefined) {
-      window.clearTimeout(reconnectTimer)
-    }
-    socket?.close()
-  }
+    destroyed = true;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    ws?.close();
+    setState('offline');
+  };
 }
 
-export async function fetchEscalations(): Promise<Escalation[]> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/escalations`)
-    if (!response.ok) {
-      return []
-    }
+// ─── MESSAGE HELPERS ──────────────────────────────────────────────────────────
 
-    return await response.json() as Escalation[]
-  } catch (error) {
-    console.log('Group A escalations unavailable; using mock queue.', error)
-    return []
-  }
+/** Convert agent sender name to display label
+ *  "prediction_agent" → "PREDICTION-AI"
+ *  "commander_agent"  → "COMMANDER-AI"
+ */
+export function formatAgentName(sender: string): string {
+  return sender
+    .replace(/_agent$/, '')
+    .replace(/_/g, '-')
+    .toUpperCase() + '-AI';
 }
 
-export async function approveEscalation(id: string): Promise<boolean> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/escalations/${id}/approve`, {
-      method: 'POST',
-    })
-    return response.ok
-  } catch (error) {
-    console.log('Group A escalation approve failed.', error)
-    return false
-  }
+/** Convert priority number to severity string */
+export function priorityToSeverity(
+  priority: MessagePriority
+): 'critical' | 'high' | 'medium' | 'low' | 'info' {
+  const map: Record<MessagePriority, 'critical' | 'high' | 'medium' | 'low' | 'info'> = {
+    1: 'critical',
+    2: 'high',
+    3: 'medium',
+    4: 'low',
+    5: 'info',
+  };
+  return map[priority] ?? 'info';
 }
 
-export async function rejectEscalation(id: string, reason: string): Promise<boolean> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/escalations/${id}/reject`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ reason }),
-    })
-    return response.ok
-  } catch (error) {
-    console.log('Group A escalation reject failed.', error)
-    return false
-  }
-}
-
-export async function checkBackendHealth(): Promise<boolean> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/health`)
-    return response.ok
-  } catch (error) {
-    console.log('Group A backend health check failed; using simulation mode.', error)
-    return false
-  }
+/** Extract display text from a message payload */
+export function extractMessageText(msg: AgentMessage): string {
+  const p = msg.payload;
+  if (typeof p.summary === 'string') return p.summary;
+  if (typeof p.action === 'string') return p.action;
+  if (typeof p.description === 'string') return p.description;
+  if (msg.reasoning.length > 0) return msg.reasoning[0];
+  return `${formatAgentName(msg.sender)} decision on ${msg.topic}`;
 }

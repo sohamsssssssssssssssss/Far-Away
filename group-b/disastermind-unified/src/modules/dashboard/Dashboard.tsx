@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react'
-import {
-  checkBackendHealth,
-  connectWebSocket,
-  type Message,
-  type WebSocketConnectionState,
-} from '../../lib/disasterApi'
+import { useApiStatus } from '../../hooks/useApiStatus'
+import { connectWebSocket } from '../../lib/disasterApi'
+import type { AgentMessage, WSConnectionState } from '../../lib/disasterApi'
 import { AgentFeed } from './components/AgentFeed'
 import { BriefingPanel } from './components/BriefingPanel'
 import { EscalationQueue } from './components/EscalationQueue'
@@ -27,11 +24,10 @@ function formatStatusTime(timestamp: string) {
 }
 
 export function Dashboard() {
-  const [backendOnline, setBackendOnline] = useState(false)
-  const [wsState, setWsState] = useState<WebSocketConnectionState>('reconnecting')
-  const [latestMessage, setLatestMessage] = useState<Message | null>(null)
+  const { status, setWsState, recordMessage } = useApiStatus()
+  const [latestMessage, setLatestMessage] = useState<AgentMessage | null>(null)
   const [lastMessageTime, setLastMessageTime] = useState('--:--:--')
-  const connectionState: WebSocketConnectionState = backendOnline ? wsState : 'offline'
+  const connectionState: WSConnectionState = status.backendOnline ? status.wsState : 'offline'
 
   // Demo Timeline States
   const [isRiverWarningActive, setIsRiverWarningActive] = useState(false)
@@ -144,39 +140,21 @@ export function Dashboard() {
   }
 
   useEffect(() => {
-    let cancelled = false
-
-    const checkHealth = async () => {
-      const isHealthy = await checkBackendHealth()
-
-      if (!cancelled) {
-        setBackendOnline(isHealthy)
-      }
-    }
-
-    checkHealth()
-    const healthTimer = window.setInterval(checkHealth, 30000)
-
     const disconnect = connectWebSocket(
       (message) => {
         setLatestMessage(message)
         setLastMessageTime(formatStatusTime(message.timestamp))
-        setBackendOnline(true)
+        recordMessage()
       },
       (state) => {
         setWsState(state)
-        if (state === 'connected') {
-          setBackendOnline(true)
-        }
       },
     )
 
     return () => {
-      cancelled = true
-      window.clearInterval(healthTimer)
       disconnect()
     }
-  }, [])
+  }, [setWsState, recordMessage])
 
   return (
     <main className="dashboard-module" aria-label="DisasterMind commander dashboard">
@@ -259,14 +237,14 @@ export function Dashboard() {
       </div>
 
       <div className="dashboard-status-bar" aria-label="Group A backend status">
-        <span className={backendOnline ? 'status-online' : 'status-offline'}>
-          ● {backendOnline ? 'GROUP A CONNECTED' : 'GROUP A OFFLINE'}
+        <span className={status.backendOnline ? 'status-online' : 'status-offline'}>
+          ● {status.backendOnline ? 'GROUP A CONNECTED' : 'GROUP A OFFLINE'}
         </span>
         <span className="status-separator">|</span>
-        <span>{connectionState === 'connected' ? 'WS LIVE' : 'WS RECONNECTING...'}</span>
+        <span>{connectionState === 'connected' ? 'WS LIVE' : connectionState === 'connecting' ? 'WS CONNECTING...' : 'WS RECONNECTING...'}</span>
         <span className="status-separator">|</span>
         <span>LAST MSG {lastMessageTime}</span>
-        {!backendOnline && (
+        {!status.backendOnline && (
           <>
             <span className="status-separator">|</span>
             <span className="status-fallback">Fallback: SIMULATION MODE ACTIVE</span>
@@ -301,7 +279,7 @@ export function Dashboard() {
         </section>
         <aside className="side-column right-column">
           <EscalationQueue
-            backendOnline={backendOnline}
+            backendOnline={status.backendOnline}
             incomingMessage={latestMessage}
             timelineEscalations={timelineEscalations}
             onApproveZone7={handleApproveZone7}
