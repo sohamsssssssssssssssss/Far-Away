@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400&family=Rajdhani:wght@600;700&display=swap');
+
+:root {
+  --bg-base: #0a0d14;
+  --bg-panel: #0f1520;
+  --bg-card: #151d2e;
+  --accent-primary: #00d4ff;
+  --accent-danger: #ff3b3b;
+  --accent-warning: #ffaa00;
+  --accent-success: #00e676;
+  --accent-muted: #3a4a6b;
+  --text-primary: #e8f0fe;
+  --text-secondary: #7a8baa;
+  --text-dim: #3a4a6b;
+  --font-heading: 'Rajdhani', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --font-body: 'Inter', system-ui, sans-serif;
+
+  color: var(--text-primary);
+  background: var(--bg-base);
+  font-family: var(--font-body);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 1100px;
+  height: 100%;
+  min-height: 100vh;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background:
+    radial-gradient(circle at 50% -10%, rgba(0, 212, 255, .13), transparent 32%),
+    linear-gradient(180deg, #0c1018 0%, var(--bg-base) 46%);
+}
+
+button {
+  font: inherit;
+}
