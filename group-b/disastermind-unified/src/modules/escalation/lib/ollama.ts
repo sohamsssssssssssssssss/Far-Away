@@ -1,4 +1,4 @@
-import { ollamaChat } from '../../../lib/ollama'
+import { callLLM } from '../../../lib/llm'
 
 export type EscalationMemoFields = {
   situation: string
@@ -52,6 +52,9 @@ export function parseEscalationMemo(text: string): EscalationMemoFields {
 }
 
 export async function generateEscalationMemo(prompt: string): Promise<EscalationMemoFields> {
-  const text = await ollamaChat(SYSTEM_PROMPT, prompt)
-  return parseEscalationMemo(text)
+  const result = await callLLM([
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: prompt },
+  ])
+  return parseEscalationMemo(result.text)
 }

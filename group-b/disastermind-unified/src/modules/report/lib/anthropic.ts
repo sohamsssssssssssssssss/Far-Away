@@ -1,4 +1,4 @@
-import { ollamaChat } from '../../../lib/ollama'
+import { callLLM } from '../../../lib/llm'
 import type { Incident } from './incidents'
 
 export type ReportSection = {
@@ -42,7 +42,11 @@ Return exactly these section headers where applicable: ${requiredSectionOrder.jo
 }
 
 export async function generateReport(input: GenerateReportInput): Promise<string> {
-  return ollamaChat(systemPrompt, buildUserPrompt(input))
+  const result = await callLLM([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: buildUserPrompt(input) },
+  ])
+  return result.text
 }
 
 export function parseReport(text: string): ReportSection[] {
