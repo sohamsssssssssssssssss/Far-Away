@@ -1,0 +1,65 @@
+# Spatial state — PostgreSQL + PostGIS (PRD Step 9). Mirrors the `postgis`
+# service in docker-compose.yml (postgis/postgis:16-3.4). Referenced by
+# DM_POSTGRES_DSN -> postgresql://disastermind:disastermind@postgis:5432/disastermind.
+# Credentials are inlined here only to match the local compose defaults; use a
+# Kubernetes Secret in any real deployment.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgis
+  labels:
+    app.kubernetes.io/name: postgis
+    app.kubernetes.io/part-of: disastermind
+spec:
+  selector:
+    app.kubernetes.io/name: postgis
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgis
+  labels:
+    app.kubernetes.io/name: postgis
+    app.kubernetes.io/part-of: disastermind
+spec:
+  serviceName: postgis
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgis
+        app.kubernetes.io/part-of: disastermind
+    spec:
+      containers:
+        - name: postgis
+          image: postgis/postgis:16-3.4
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: disastermind
+            - name: POSTGRES_USER
+              value: disastermind
+            - name: POSTGRES_PASSWORD
+              value: disastermind
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: postgis-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: postgis-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

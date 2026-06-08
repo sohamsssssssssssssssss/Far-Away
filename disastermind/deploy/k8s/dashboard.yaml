@@ -1,0 +1,81 @@
+# DisasterMind Commander Dashboard (PRD Step 7 + Step 10).
+#
+# Serves the FastAPI/WebSocket transport from disastermind/api/app.py via its
+# create_app() factory. The dashboard logically corresponds to running the api
+# package (``python -m disastermind.api``); concretely it is served by uvicorn
+# against the create_app application factory (FastAPI is an optional, lazily
+# imported dependency — see HARD RULE 2 — so the image must be built with the
+# extras that include fastapi/uvicorn, e.g. `docker build --build-arg EXTRAS=...`).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: disastermind-api
+  labels:
+    app.kubernetes.io/name: disastermind-api
+    app.kubernetes.io/part-of: disastermind
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: disastermind-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: disastermind-api
+        app.kubernetes.io/part-of: disastermind
+    spec:
+      containers:
+        - name: api
+          image: disastermind:latest
+          imagePullPolicy: IfNotPresent
+          # Serve the dashboard (PRD Step 7). Equivalent to running the api
+          # package; uvicorn binds the create_app() FastAPI factory.
+          command: ["uvicorn"]
+          args:
+            - "disastermind.api:create_app"
+            - "--factory"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8000"
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: disastermind-config
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: disastermind-api
+  labels:
+    app.kubernetes.io/name: disastermind-api
+    app.kubernetes.io/part-of: disastermind
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: disastermind-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

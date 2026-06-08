@@ -1,0 +1,66 @@
+# Sensor telemetry time-series — TimescaleDB (PRD Step 9). Mirrors the
+# `timescaledb` service in docker-compose.yml (timescale/timescaledb:2.15.0-pg16).
+# Referenced by DM_TIMESCALE_DSN ->
+# postgresql://disastermind:disastermind@timescaledb:5432/dm_telemetry. The
+# compose file maps host port 5433 -> container 5432; inside the cluster the
+# Service simply exposes 5432. Use a Kubernetes Secret for credentials in prod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: timescaledb
+  labels:
+    app.kubernetes.io/name: timescaledb
+    app.kubernetes.io/part-of: disastermind
+spec:
+  selector:
+    app.kubernetes.io/name: timescaledb
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: timescaledb
+  labels:
+    app.kubernetes.io/name: timescaledb
+    app.kubernetes.io/part-of: disastermind
+spec:
+  serviceName: timescaledb
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: timescaledb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: timescaledb
+        app.kubernetes.io/part-of: disastermind
+    spec:
+      containers:
+        - name: timescaledb
+          image: timescale/timescaledb:2.15.0-pg16
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: dm_telemetry
+            - name: POSTGRES_USER
+              value: disastermind
+            - name: POSTGRES_PASSWORD
+              value: disastermind
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: timescale-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: timescale-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

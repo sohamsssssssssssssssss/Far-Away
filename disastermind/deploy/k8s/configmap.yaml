@@ -1,0 +1,44 @@
+# DisasterMind runtime configuration (PRD Group A, Step 10).
+#
+# Mirrors the DM_* environment variables read by disastermind/core/config.py
+# (Settings) and documented in .env.example. Every value has a safe default and
+# the system runs fully offline (in-memory bus + JSONL audit) with none set; the
+# values below point the deployment at the in-cluster backing services declared
+# in the StatefulSets (kafka / postgis / timescaledb / elasticsearch / minio).
+#
+# Secrets (Twilio / FCM / FIRMS / store passwords) belong in a Kubernetes Secret,
+# not here. The dispatch credentials are left blank -> dry-run (PRD Step 8).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: disastermind-config
+  labels:
+    app.kubernetes.io/part-of: disastermind
+data:
+  # --- coordination loop (PRD Step 10 / Step 7 / Step 3) ---------------------
+  DM_LOOP_INTERVAL: "30"
+  DM_ESCALATION_TIMEOUT: "300"
+  DM_GRID_METERS: "100"
+
+  # --- message bus (PRD Step 10: primary + backup for failover) -------------
+  DM_USE_KAFKA: "false"
+  DM_KAFKA_BROKERS: "kafka:9092"
+  DM_KAFKA_BACKUP: "kafka-backup:9092"
+
+  # --- storage (PRD Step 9) -------------------------------------------------
+  DM_POSTGRES_DSN: "postgresql://disastermind:disastermind@postgis:5432/disastermind"
+  DM_TIMESCALE_DSN: "postgresql://disastermind:disastermind@timescaledb:5432/dm_telemetry"
+  DM_ELASTICSEARCH_URL: "http://elasticsearch:9200"
+  DM_AUDIT_LOG: "/data/audit.jsonl"
+
+  # --- external feeds (PRD Step 2) ------------------------------------------
+  DM_IMD_URL: "https://mausam.imd.gov.in"
+  DM_USGS_URL: "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson"
+  DM_FIRMS_KEY: ""
+  DM_OPENMETEO_URL: "https://api.open-meteo.com/v1/forecast"
+
+  # --- dispatch credentials (PRD Step 8; blank -> dry-run) ------------------
+  DM_TWILIO_SID: ""
+  DM_TWILIO_TOKEN: ""
+  DM_FCM_KEY: ""
+  DM_IRIDIUM_URL: ""

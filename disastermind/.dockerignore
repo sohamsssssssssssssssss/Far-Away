@@ -1,0 +1,45 @@
+# Keep the build context lean and the image reproducible.
+
+# Python build / cache artefacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# Test / tooling caches (not needed in the runtime image)
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+tests/
+
+# Local runtime state (regenerated at runtime)
+audit.jsonl
+*.jsonl
+*.log
+
+# Version control & editor cruft
+.git/
+.gitignore
+.github/
+.idea/
+.vscode/
+*.swp
+
+# Local environment / secrets (never bake into the image)
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Local deployment manifests are applied with kubectl, not baked into the image
+deploy/
+
+# OS noise
+.DS_Store

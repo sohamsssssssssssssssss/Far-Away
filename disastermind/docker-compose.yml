@@ -1,0 +1,81 @@
+# DisasterMind backing services (PRD Step 9 storage + Step 2/10 message bus).
+# The application runs fully without these (in-memory bus + JSONL audit); bring
+# them up to exercise the production storage/bus paths.
+#
+#   docker compose up -d
+#
+services:
+  # --- message bus (Step 10: primary + backup for failover) ----------------
+  kafka:
+    image: bitnami/kafka:3.7
+    ports: ["9092:9092"]
+    environment:
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_PROCESS_ROLES: "controller,broker"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    volumes: ["kafka-data:/bitnami/kafka"]
+
+  kafka-backup:
+    image: bitnami/kafka:3.7
+    ports: ["9094:9092"]
+    environment:
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_PROCESS_ROLES: "controller,broker"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka-backup:9093"
+      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-backup:9092"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    volumes: ["kafka-backup-data:/bitnami/kafka"]
+
+  # --- spatial state: PostgreSQL + PostGIS ---------------------------------
+  postgis:
+    image: postgis/postgis:16-3.4
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_DB: disastermind
+      POSTGRES_USER: disastermind
+      POSTGRES_PASSWORD: disastermind
+    volumes: ["postgis-data:/var/lib/postgresql/data"]
+
+  # --- sensor telemetry time-series: TimescaleDB ---------------------------
+  timescaledb:
+    image: timescale/timescaledb:2.15.0-pg16
+    ports: ["5433:5432"]
+    environment:
+      POSTGRES_DB: dm_telemetry
+      POSTGRES_USER: disastermind
+      POSTGRES_PASSWORD: disastermind
+    volumes: ["timescale-data:/var/lib/postgresql/data"]
+
+  # --- incident logs / full decision audit trail: Elasticsearch ------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    ports: ["9200:9200"]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes: ["es-data:/usr/share/elasticsearch/data"]
+
+  # --- object storage: satellite imagery, model artefacts: MinIO -----------
+  minio:
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
+    command: server /data --console-address ":9001"
+    ports: ["9000:9000", "9001:9001"]
+    environment:
+      MINIO_ROOT_USER: disastermind
+      MINIO_ROOT_PASSWORD: disastermind
+    volumes: ["minio-data:/data"]
+
+volumes:
+  kafka-data:
+  kafka-backup-data:
+  postgis-data:
+  timescale-data:
+  es-data:
+  minio-data:

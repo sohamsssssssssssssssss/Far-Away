@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<!--
+  DisasterMind Commander Dashboard (PRD Step 7 dashboard + Step 10 WebSocket).
+
+  Single-file vanilla-JS UI. No build step, no external dependencies, no CDN.
+  Data sources (all served by disastermind.api.app):
+    * GET  /topics                          - per-topic message volume (polled)
+    * GET  /escalations                     - open escalations awaiting a human (polled)
+    * GET  /health                          - liveness snapshot (polled)
+    * WS   /ws                              - live stream of new bus messages (PRD Step 10)
+    * POST /escalations/{id}/approve        - approve button -> Commander dispatches
+    * POST /escalations/{id}/reject         - reject button  -> rejection ACK
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DisasterMind — Commander Dashboard</title>
+  <style>
+    :root {
+      --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3;
+      --muted: #8b949e; --accent: #58a6ff; --ok: #3fb950; --warn: #d29922;
+      --crit: #f85149; --chip: #21262d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--fg); font-size: 14px;
+    }
+    header {
+      display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+      border-bottom: 1px solid var(--border); background: var(--panel);
+      position: sticky; top: 0; z-index: 5;
+    }
+    header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+    .status { margin-left: auto; display: flex; align-items: center; gap: 16px; color: var(--muted); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--crit); display: inline-block; }
+    .dot.live { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 20px; }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+    .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
+    .full { grid-column: 1 / -1; }
+    .tiles { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tile {
+      background: var(--chip); border: 1px solid var(--border); border-radius: 6px;
+      padding: 8px 12px; min-width: 120px;
+    }
+    .tile .k { color: var(--muted); font-size: 11px; }
+    .tile .v { font-size: 20px; font-weight: 700; }
+    .esc {
+      border: 1px solid var(--border); border-left: 3px solid var(--warn);
+      border-radius: 6px; padding: 10px 12px; margin-bottom: 10px;
+    }
+    .esc .trigger { font-weight: 600; color: var(--warn); }
+    .esc .meta { color: var(--muted); font-size: 12px; margin: 4px 0 8px; word-break: break-all; }
+    .esc .actions { display: flex; gap: 8px; }
+    button {
+      cursor: pointer; border: 1px solid var(--border); border-radius: 6px;
+      padding: 6px 14px; font-size: 13px; font-weight: 600; color: var(--fg);
+      background: var(--chip);
+    }
+    button.approve { background: #176f2c; border-color: #2ea043; }
+    button.reject { background: #5c1b1b; border-color: #b22222; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .empty { color: var(--muted); font-style: italic; }
+    #stream { max-height: 360px; overflow: auto; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+    .row { padding: 5px 8px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; }
+    .row:last-child { border-bottom: none; }
+    .row .topic { color: var(--accent); min-width: 150px; }
+    .row .type { color: var(--muted); min-width: 90px; }
+    .row .inc { color: var(--fg); opacity: .9; }
+    .row.p-CRITICAL .topic { color: var(--crit); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DisasterMind — Commander Dashboard</h1>
+    <div class="status">
+      <span id="health">health: …</span>
+      <span><span id="ws-dot" class="dot"></span> <span id="ws-state">/ws connecting…</span></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>Topic volume (GET /topics)</h2>
+      <div id="topics" class="tiles"><span class="empty">loading /topics…</span></div>
+    </section>
+
+    <section class="panel">
+      <h2>Open escalations (GET /escalations)</h2>
+      <div id="escalations"><span class="empty">no pending escalations</span></div>
+    </section>
+
+    <section class="panel full">
+      <h2>Live message stream (WebSocket /ws)</h2>
+      <div id="stream"><span class="empty">waiting for messages on /ws…</span></div>
+    </section>
+  </main>
+
+  <script>
+    "use strict";
+
+    // ---- Endpoints (relative so this works behind any host/port) -------------
+    const API = {
+      topics: "/topics",
+      escalations: "/escalations",
+      health: "/health",
+      approve: (id) => `/escalations/${encodeURIComponent(id)}/approve`,
+      reject: (id) => `/escalations/${encodeURIComponent(id)}/reject`,
+      ws: () => {
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        return `${proto}//${location.host}/ws`;
+      },
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const POLL_MS = 3000;
+    const MAX_ROWS = 200;
+
+    // ---- Polling: /topics ----------------------------------------------------
+    async function pollTopics() {
+      try {
+        const counts = await (await fetch(API.topics)).json();
+        const el = $("topics");
+        const keys = Object.keys(counts).sort();
+        if (!keys.length) { el.innerHTML = '<span class="empty">no traffic yet</span>'; return; }
+        el.innerHTML = keys.map((k) =>
+          `<div class="tile"><div class="k">${escapeHtml(k)}</div><div class="v">${counts[k]}</div></div>`
+        ).join("");
+      } catch (e) { /* transient; next poll retries */ }
+    }
+
+    // ---- Polling: /escalations ----------------------------------------------
+    async function pollEscalations() {
+      try {
+        const rows = await (await fetch(API.escalations)).json();
+        const el = $("escalations");
+        if (!Array.isArray(rows) || !rows.length) {
+          el.innerHTML = '<span class="empty">no pending escalations</span>'; return;
+        }
+        el.innerHTML = rows.map(renderEscalation).join("");
+      } catch (e) { /* transient */ }
+    }
+
+    function renderEscalation(r) {
+      const id = r.report_id || r.id || "";
+      const trigger = r.trigger || r.escalation_trigger || "escalation";
+      const summary = (r.summary || r.reason || "").toString();
+      return `<div class="esc" data-id="${escapeHtml(id)}">
+        <div class="trigger">${escapeHtml(trigger)}</div>
+        <div class="meta">id: ${escapeHtml(id)}${summary ? " — " + escapeHtml(summary) : ""}</div>
+        <div class="actions">
+          <button class="approve" onclick="decide('${jsId(id)}','approve',this)">Approve</button>
+          <button class="reject" onclick="decide('${jsId(id)}','reject',this)">Reject</button>
+        </div>
+      </div>`;
+    }
+
+    // ---- POST approve / reject ----------------------------------------------
+    async function decide(id, action, btn) {
+      const buttons = btn.parentElement.querySelectorAll("button");
+      buttons.forEach((b) => (b.disabled = true));
+      const url = action === "approve" ? API.approve(id) : API.reject(id);
+      try {
+        const resp = await fetch(url, { method: "POST" });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+      } catch (e) {
+        buttons.forEach((b) => (b.disabled = false));
+        alert(`Failed to ${action} ${id}: ${e.message}`);
+        return;
+      }
+      // Refresh both views immediately after a decision.
+      await Promise.all([pollEscalations(), pollTopics()]);
+    }
+    window.decide = decide;
+
+    // ---- Polling: /health ----------------------------------------------------
+    async function pollHealth() {
+      try {
+        const h = await (await fetch(API.health)).json();
+        $("health").textContent =
+          `health: ${h.status} · seen ${h.messages_seen ?? "?"} · pending ${h.pending_escalations ?? "?"}`;
+      } catch (e) { $("health").textContent = "health: unreachable"; }
+    }
+
+    // ---- WebSocket: /ws (live stream, PRD Step 10) ---------------------------
+    let ws = null;
+    function connectWs() {
+      setWsState(false, "/ws connecting…");
+      ws = new WebSocket(API.ws());
+      ws.onopen = () => setWsState(true, "/ws live");
+      ws.onclose = () => { setWsState(false, "/ws reconnecting…"); setTimeout(connectWs, 2000); };
+      ws.onerror = () => { try { ws.close(); } catch (_) {} };
+      ws.onmessage = (ev) => {
+        let msg; try { msg = JSON.parse(ev.data); } catch (_) { return; }
+        if (msg.kind === "snapshot") { /* initial snapshot of /topics */ return; }
+        appendRow(msg);
+        // A streamed escalation/dispatch likely changed pending state.
+        if (msg.topic && /escalation|dispatch|field/i.test(msg.topic)) pollEscalations();
+      };
+    }
+
+    function setWsState(live, label) {
+      $("ws-dot").classList.toggle("live", !!live);
+      $("ws-state").textContent = label;
+    }
+
+    function appendRow(m) {
+      const el = $("stream");
+      if (el.querySelector(".empty")) el.innerHTML = "";
+      const row = document.createElement("div");
+      row.className = "row p-" + (m.priority || "");
+      row.innerHTML =
+        `<span class="topic">${escapeHtml(m.topic || "?")}</span>` +
+        `<span class="type">${escapeHtml(m.type || "")}</span>` +
+        `<span class="inc">${escapeHtml(m.incident_id || "")}</span>`;
+      el.appendChild(row);
+      while (el.childElementCount > MAX_ROWS) el.removeChild(el.firstElementChild);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    // ---- helpers -------------------------------------------------------------
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+    function jsId(s) { return String(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'"); }
+
+    // ---- boot ----------------------------------------------------------------
+    function pollAll() { pollTopics(); pollEscalations(); pollHealth(); }
+    pollAll();
+    setInterval(pollAll, POLL_MS);
+    connectWs();
+  </script>
+</body>
+</html>

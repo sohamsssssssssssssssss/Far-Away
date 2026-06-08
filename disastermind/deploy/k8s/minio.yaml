@@ -1,0 +1,68 @@
+# Object storage — MinIO (PRD Step 9: satellite imagery + model artefacts).
+# Mirrors the `minio` service in docker-compose.yml
+# (minio/minio:RELEASE.2024-06-13T22-53-53Z, `server /data --console-address
+# :9001`). Port 9000 is the S3 API, 9001 the web console. Credentials are inlined
+# to match the local compose defaults; use a Kubernetes Secret in any real
+# deployment.
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  labels:
+    app.kubernetes.io/name: minio
+    app.kubernetes.io/part-of: disastermind
+spec:
+  selector:
+    app.kubernetes.io/name: minio
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  labels:
+    app.kubernetes.io/name: minio
+    app.kubernetes.io/part-of: disastermind
+spec:
+  serviceName: minio
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: minio
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: minio
+        app.kubernetes.io/part-of: disastermind
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:RELEASE.2024-06-13T22-53-53Z
+          args: ["server", "/data", "--console-address", ":9001"]
+          ports:
+            - name: s3
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          env:
+            - name: MINIO_ROOT_USER
+              value: disastermind
+            - name: MINIO_ROOT_PASSWORD
+              value: disastermind
+          volumeMounts:
+            - name: minio-data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: minio-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
