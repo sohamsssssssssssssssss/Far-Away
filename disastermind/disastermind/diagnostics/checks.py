@@ -180,6 +180,50 @@ def subscribed_topics(bus) -> set[str]:
     return {topic for topic, lst in subs.items() if lst}
 
 
+def subscribers_by_topic(bus) -> dict[str, set[str]]:
+    """Map every subscribed topic to the set of *subscriber names* on it.
+
+    Reads the :class:`~disastermind.core.bus.InMemoryBus` ``_subs`` table whose
+    entries are ``(subscriber_name, callback)`` tuples (see ``BaseAgent.__init__``
+    which calls ``bus.subscribe(topic, self.name, ...)``). Defensive: returns an
+    empty map for any bus that does not expose ``_subs``.
+    """
+    subs = getattr(bus, "_subs", None)
+    if subs is None:
+        return {}
+    out: dict[str, set[str]] = {}
+    for topic, lst in subs.items():
+        if not lst:
+            continue
+        out[topic] = {name for (name, _cb) in lst}
+    return out
+
+
+def all_topic_subscriber_names(bus) -> set[str]:
+    """Names of subscribers that listen on the *entire* subscribed topic set.
+
+    These are the all-topic collectors — the observability ``MetricsCollector``,
+    the tracing ``TraceCollector`` and the state persistor — which subscribe to
+    every ``Topic.*`` constant rather than to one functional edge. A topic that is
+    *only* watched by such collectors is RESERVED contract surface, not a wiring
+    break: the collectors fan out over the whole contract by design.
+    """
+    by_topic = subscribers_by_topic(bus)
+    if not by_topic:
+        return set()
+    all_topics = set(by_topic.keys())
+    # Build name -> set(topics it subscribes to).
+    topics_per_name: dict[str, set[str]] = {}
+    for topic, names in by_topic.items():
+        for name in names:
+            topics_per_name.setdefault(name, set()).add(topic)
+    return {
+        name
+        for name, topics in topics_per_name.items()
+        if topics >= all_topics  # covers the full subscribed contract surface
+    }
+
+
 def produced_topics(bus) -> set[str]:
     """Topics that were actually published (from the bus history)."""
     return {m.topic for m in getattr(bus, "history", [])}
@@ -196,26 +240,74 @@ def known_contract_topics() -> set[str]:
     }
 
 
-def analyse_dag(produced: set[str], subscribed: set[str]) -> dict[str, list[str]]:
+def analyse_dag(
+    produced: set[str],
+    subscribed: set[str],
+    subscribers_by_topic: dict[str, set[str]] | None = None,
+    all_topic_subscribers: set[str] | None = None,
+) -> dict[str, list[str]]:
     """Pure DAG-balance analysis (unit-testable without a bus).
 
     A topic is *producible* if it was produced in the dry run OR it is a declared
     well-known contract topic (it can be produced by some flow we didn't exercise).
 
       * orphan_producers — produced, no subscriber, and not a terminal sink.
-      * dead_subscribers — subscribed, but the topic is not producible at all
-                           (nobody produces it and it is not a contract topic).
+      * reserved         — subscribed but unproduced, AND every subscriber on it is
+                           an all-topic collector (observability / tracing / state
+                           persistor). Reserved contract surface, NOT a wiring
+                           break. ``Topic.COMMANDER_REVIEW`` is the canonical case:
+                           it has no producer and is only "subscribed" because the
+                           all-topic collectors fan out over the whole ``Topic`` set.
+      * dead_subscribers — a *real* break: a single-purpose subscriber (an agent
+                           that does NOT subscribe to the whole contract) is waiting
+                           on a topic nobody produces.
+
+    ``subscribers_by_topic`` / ``all_topic_subscribers`` are optional. When both are
+    supplied (the live-bus path) the reserved-vs-dead distinction is made
+    structurally — a contract topic is only forgiven when *all* of its subscribers
+    are all-topic collectors; a single-purpose subscriber on an unproduced topic is
+    still a dead-subscriber break even if it happens to be a declared contract
+    topic. When they are absent (pure set-only call) we fall back to the historic
+    behaviour: a declared contract topic is treated as producible (never dead).
     """
     contract = known_contract_topics()
-    producible = produced | contract
 
     orphan_producers = sorted(
         t for t in produced if t not in subscribed and not _is_terminal_sink(t)
     )
-    dead_subscribers = sorted(t for t in subscribed if t not in producible)
+
+    reserved: list[str] = []
+    dead_subscribers: list[str] = []
+
+    have_sub_info = subscribers_by_topic is not None and all_topic_subscribers is not None
+    subs_map = subscribers_by_topic or {}
+    collectors = all_topic_subscribers or set()
+
+    for topic in subscribed:
+        if topic in produced or _is_terminal_sink(topic):
+            continue  # producible / by-design sink — balanced
+
+        if have_sub_info:
+            watchers = subs_map.get(topic, set())
+            # Reserved iff there IS at least one subscriber and every subscriber on
+            # the topic is an all-topic collector (no single-purpose listener).
+            if watchers and watchers <= collectors:
+                reserved.append(topic)
+            else:
+                # A single-purpose subscriber is waiting on an unproduced topic.
+                # That is a genuine break even for a declared contract topic.
+                dead_subscribers.append(topic)
+        else:
+            # Set-only fallback (historic): a declared contract topic is assumed
+            # producible by some flow we didn't exercise; only truly undeclared
+            # topics are dead.
+            if topic not in contract:
+                dead_subscribers.append(topic)
+
     return {
         "orphan_producers": orphan_producers,
-        "dead_subscribers": dead_subscribers,
+        "reserved": sorted(reserved),
+        "dead_subscribers": sorted(dead_subscribers),
     }
 
 
@@ -262,14 +354,24 @@ def check_dag(report: Report, env: dict[str, Any]) -> None:
         )
 
     produced = produced_topics(bus)
-    analysis = analyse_dag(produced, subscribed)
+    subs_map = subscribers_by_topic(bus)
+    collectors = all_topic_subscriber_names(bus)
+    analysis = analyse_dag(
+        produced,
+        subscribed,
+        subscribers_by_topic=subs_map,
+        all_topic_subscribers=collectors,
+    )
 
     report.meta["dag_produced"] = sorted(produced)
     report.meta["dag_subscribed"] = sorted(subscribed)
+    report.meta["dag_reserved"] = analysis["reserved"]
+    report.meta["dag_all_topic_collectors"] = sorted(collectors)
     report.meta["dag_cycles"] = getattr(loop, "cycle", 0)
 
     orphans = analysis["orphan_producers"]
     deads = analysis["dead_subscribers"]
+    reserved = analysis["reserved"]
 
     if orphans:
         report.add(
@@ -296,7 +398,26 @@ def check_dag(report: Report, env: dict[str, Any]) -> None:
         report.add(
             "dag.dead_subscribers",
             Status.OK,
-            "no subscriber waits on an unproduced/undeclared topic",
+            "no single-purpose subscriber waits on an unproduced topic",
+        )
+
+    # Reserved topics are reported SEPARATELY and are NEVER a DAG break: they are
+    # declared contract surface (e.g. Topic.COMMANDER_REVIEW) that currently has no
+    # producer and is only "subscribed" because the all-topic collectors
+    # (observability / tracing / state persistor) fan out over the whole Topic set.
+    if reserved:
+        report.add(
+            "dag.reserved_topics",
+            Status.OK,
+            "reserved contract topic(s) watched only by all-topic collectors "
+            "(no producer yet, not a break): " + ", ".join(reserved),
+            {"topics": reserved},
+        )
+    else:
+        report.add(
+            "dag.reserved_topics",
+            Status.OK,
+            "no reserved-only topics (every subscribed topic has a real producer)",
         )
 
     if ran and not produced:

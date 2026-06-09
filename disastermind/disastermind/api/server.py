@@ -75,7 +75,95 @@ class DashboardServer:
 
         app = create_app(self.service)
         self._mount_static(app)
+        self._mount_security(app)
+        self._mount_cors(app)  # added last -> outermost -> handles preflight before auth
         return app
+
+    def _mount_cors(self, app: Any) -> None:
+        """Allow the browser dashboard (a different origin) to call the API.
+
+        Without CORS a deployed operator console cannot reach the backend at all.
+        Origins come from ``DM_CORS_ORIGINS`` (comma-separated; default ``*`` for
+        dev). Token auth travels in the ``Authorization`` header (not cookies), so
+        credentialed mode is off and a ``*`` origin is permitted.
+        """
+        try:
+            from fastapi.middleware.cors import CORSMiddleware
+        except Exception:
+            return
+        import os
+
+        raw = os.environ.get("DM_CORS_ORIGINS", "*").strip()
+        origins = ["*"] if raw in ("", "*") else [o.strip() for o in raw.split(",") if o.strip()]
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_credentials=False,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+    def _mount_security(self, app: Any) -> None:
+        """Optionally enforce API auth + rate limiting (PRD Step 7 hardening).
+
+        OFF BY DEFAULT — enforced only when API tokens are configured via the
+        environment (``DM_API_KEYS`` / ``DM_API_KEYS_MAP``); an unconfigured
+        deployment stays fully open so existing routes/tests are unaffected. The
+        static UI and ``/health`` stay open even when auth is on. Any failure
+        here is swallowed so security setup can never break dashboard creation.
+        """
+        try:
+            from ..security.auth import authenticate, TokenStore
+            from ..security.ratelimit import RateLimiter
+        except Exception:
+            return
+
+        store = TokenStore.from_env()
+        if not getattr(store, "enabled", False):
+            return  # default-open: no API keys configured
+
+        limiter = RateLimiter()
+        open_paths = {"/", "/index.html", "/health", "/docs", "/openapi.json", "/redoc"}
+
+        async def _reject(stype: str, send: Any, code: int, detail: str, retry: int | None = None) -> None:
+            if stype == "websocket":
+                await send({"type": "websocket.close", "code": 1008})  # policy violation
+                return
+            import json as _json
+
+            headers = [(b"content-type", b"application/json")]
+            if retry is not None:
+                headers.append((b"retry-after", str(retry).encode()))
+            await send({"type": "http.response.start", "status": code, "headers": headers})
+            await send({"type": "http.response.body", "body": _json.dumps({"detail": detail}).encode()})
+
+        # Pure-ASGI middleware: unlike BaseHTTPMiddleware (which only sees ``http``
+        # scopes and so left the ``/ws`` live stream unauthenticated), this guards
+        # BOTH ``http`` and ``websocket`` scopes.
+        class _SecurityASGI:
+            def __init__(self, inner: Any) -> None:
+                self.inner = inner
+
+            async def __call__(self, scope: Any, receive: Any, send: Any) -> Any:
+                stype = scope.get("type")
+                if stype not in ("http", "websocket"):
+                    return await self.inner(scope, receive, send)
+                if stype == "http" and scope.get("path", "") in open_paths:
+                    return await self.inner(scope, receive, send)
+                headers = {k.lower(): v for k, v in (scope.get("headers") or [])}
+                raw = headers.get(b"authorization") or headers.get(b"x-api-key")
+                token = raw.decode("latin-1") if raw else None
+                principal = authenticate(token, store=store)
+                if principal is None:
+                    return await _reject(stype, send, 401, "unauthorized")
+                result = limiter.check(principal.name)
+                if not result.allowed:
+                    raw_retry = getattr(result, "retry_after", 1)
+                    retry = 1 if raw_retry in (None, float("inf")) else max(1, int(raw_retry))
+                    return await _reject(stype, send, 429, "rate limit exceeded", retry)
+                return await self.inner(scope, receive, send)
+
+        app.add_middleware(_SecurityASGI)
 
     def _mount_static(self, app: Any) -> None:
         """Add routes that serve the single-file dashboard UI (PRD Step 7)."""

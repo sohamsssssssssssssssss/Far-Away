@@ -31,6 +31,7 @@ from .contracts import (
     TeamStatusUpdate,
 )
 from .client import MockFieldClient
+from .closure import attach_field_clients
 
 __all__ = [
     "DeploymentOrderMsg",
@@ -39,4 +40,5 @@ __all__ = [
     "SiteOverCapacityReport",
     "MockFieldClient",
     "FIELDAPP_ACK",
+    "attach_field_clients",
 ]

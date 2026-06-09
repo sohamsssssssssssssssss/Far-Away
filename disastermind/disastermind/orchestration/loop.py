@@ -29,6 +29,7 @@ log = logging.getLogger("disastermind.loop")
 # ingestion + social (producers) last.
 MODULE_BUILD_PATHS = [
     "disastermind.observability.build",  # metrics collector — subscribes to all topics
+    "disastermind.tracing.build",        # trace collector — subscribes all, per-incident latency
     "disastermind.persistence.build",    # state persistor — subscribes all, writes to storage
     "disastermind.llm.build",            # Group B escalation narrator — subscribes ESCALATION
     "disastermind.tier2.prediction.build",

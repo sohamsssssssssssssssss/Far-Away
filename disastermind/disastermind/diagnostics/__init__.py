@@ -21,6 +21,7 @@ WARN/SKIP — never a hard failure (PRD Step 10 graceful degradation).
 from __future__ import annotations
 
 from .checks import (
+    all_topic_subscriber_names,
     analyse_dag,
     check_audit,
     check_backends,
@@ -30,6 +31,7 @@ from .checks import (
     known_contract_topics,
     produced_topics,
     subscribed_topics,
+    subscribers_by_topic,
 )
 from .doctor import run_diagnostics
 from .report import Check, Report, Status
@@ -47,5 +49,7 @@ __all__ = [
     "check_backends",
     "subscribed_topics",
     "produced_topics",
+    "subscribers_by_topic",
+    "all_topic_subscriber_names",
     "known_contract_topics",
 ]

@@ -10,13 +10,27 @@ dependency and no network (PRD HARD RULE 2). Subcommands:
                               summary plus per-topic message counts.
   * ``verify-audit <path>`` — re-walk a JSONL decision log's hash-chain via
                               :meth:`DecisionLogger.verify_chain` (PRD Step 9).
+  * ``train --out <dir>``   — fit + persist the per-module risk models via
+                              :func:`disastermind.ml.training.train_all` and print
+                              the resulting manifest.
+  * ``eval [--out <dir>]``  — backtest every module via
+                              :func:`disastermind.ml.eval.backtest`, print per-module
+                              metrics and (with ``--out``) write model cards.
+  * ``doctor [--audit <p>]``— run the system self-check via
+                              :func:`disastermind.diagnostics.run_diagnostics` and
+                              return its exit code.
+  * ``serve [--host --port]``— serve the dashboard via
+                              :func:`disastermind.api.server.run` (lazy uvicorn).
 
+Each heavier subcommand imports its target *inside* its handler so ``--help`` and
+the lightweight commands keep working with stdlib only and no optional dependency.
 Every command returns a conventional process exit code (0 = success) so the CLI
 composes in scripts/CI.
 """
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from typing import Sequence
 
@@ -124,6 +138,98 @@ def cmd_verify_audit(args: argparse.Namespace, out=sys.stdout) -> int:
     return 1
 
 
+# ------------------------------------------------------------------------- train
+def cmd_train(args: argparse.Namespace, out=sys.stdout) -> int:
+    """Fit + persist the per-module risk models and print the manifest.
+
+    Lazily imports :func:`disastermind.ml.training.train_all` so the dependency is
+    paid only when training; runs fully offline (the wrappers fall back to a
+    deterministic heuristic when no optional ML library is installed).
+    """
+    from .ml.training import train_all
+
+    manifest = train_all(args.out, seed=args.seed)
+    print(f"{_PROG} train: wrote {len(manifest['models'])} model(s)", file=out)
+    print(f"out_dir: {manifest['out_dir']}", file=out)
+    print(f"manifest: {os.path.join(manifest['out_dir'], 'manifest.json')}", file=out)
+    for entry in manifest["models"]:
+        backend = entry["backend"]
+        active = "active" if entry.get("backend_active") else "heuristic"
+        print(
+            f"  [{entry['module']}] {entry['path']} "
+            f"(backend={backend}/{active}, n_train={entry['n_train']})",
+            file=out,
+        )
+    return 0
+
+
+# -------------------------------------------------------------------------- eval
+def cmd_eval(args: argparse.Namespace, out=sys.stdout) -> int:
+    """Backtest every module and print per-module metrics (PRD Step 3).
+
+    Lazily imports :func:`disastermind.ml.eval.backtest`. With ``--out`` the result
+    JSON and per-module model cards are written under that directory.
+    """
+    from .ml.eval import backtest
+
+    out_dir = args.out or None
+    result = backtest(out_dir, seed=args.seed)
+    print(f"{_PROG} eval: backtested {len(result['modules'])} module(s)", file=out)
+    print("per-module metrics:", file=out)
+    for entry in result["modules"]:
+        m = entry["metrics"]
+        print(
+            f"  [{entry['module']}] "
+            f"AUC={m['auc']:.3f}  Brier={m['brier']:.3f}  "
+            f"acc={m['accuracy']:.3f}  ECE={m['ece']:.3f}  "
+            f"(n_test={entry['n_test']}, backend={entry['backend']})",
+            file=out,
+        )
+    if out_dir:
+        print(f"artifacts written to: {result.get('out_dir', out_dir)}", file=out)
+    return 0
+
+
+# ------------------------------------------------------------------------ doctor
+def cmd_doctor(args: argparse.Namespace, out=sys.stdout) -> int:
+    """Run the system self-check and return its exit code (PRD Step 10).
+
+    Lazily imports :func:`disastermind.diagnostics.run_diagnostics`; prints the
+    Markdown report (or JSON with ``--json``) and returns the report's exit code
+    (0 when nothing FAILED, 1 otherwise).
+    """
+    from .diagnostics import run_diagnostics
+
+    report = run_diagnostics(audit_path=args.audit or None)
+    if getattr(args, "json", False):
+        print(report.to_json(), file=out)
+    else:
+        print(report.to_markdown(), file=out)
+    return int(report.exit_code)
+
+
+# ------------------------------------------------------------------------- serve
+def cmd_serve(args: argparse.Namespace, out=sys.stdout) -> int:
+    """Serve the dashboard over HTTP/WebSocket (PRD Step 10).
+
+    Lazily imports :func:`disastermind.api.server.run` which itself lazily imports
+    uvicorn. If uvicorn is absent we print a clear message and return a nonzero exit
+    code rather than blocking. This call *does* block while serving, so tests never
+    invoke it (they assert on parsing/dispatch only).
+    """
+    from .api.server import run as run_server
+
+    print(f"{_PROG} serve: starting dashboard on {args.host}:{args.port}", file=out)
+    try:
+        run_server(host=args.host, port=args.port)
+    except RuntimeError as exc:
+        print(f"[error] cannot serve: {exc}", file=sys.stderr)
+        return 3
+    except KeyboardInterrupt:  # pragma: no cover - interactive shutdown
+        print(f"{_PROG} serve: stopped", file=out)
+    return 0
+
+
 # --------------------------------------------------------------------- helpers
 def _topic_counts(history: Sequence[Message]) -> dict[str, int]:
     counts: dict[str, int] = {}
@@ -191,7 +297,10 @@ def build_parser() -> argparse.ArgumentParser:
         prog=_PROG,
         description="DisasterMind — autonomous multi-agent disaster coordination CLI.",
     )
-    sub = parser.add_subparsers(dest="command", metavar="{run,simulate,verify-audit}")
+    sub = parser.add_subparsers(
+        dest="command",
+        metavar="{run,simulate,verify-audit,train,eval,doctor,serve}",
+    )
 
     p_run = sub.add_parser("run", help="build the agent DAG and drive the coordination loop")
     p_run.add_argument(
@@ -234,6 +343,69 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_audit.add_argument("path", help="path to the JSONL audit log")
     p_audit.set_defaults(func=cmd_verify_audit)
+
+    p_train = sub.add_parser(
+        "train", help="fit + persist the per-module risk models (PRD Step 3)"
+    )
+    p_train.add_argument(
+        "--out",
+        required=True,
+        help="output directory for the trained artefacts + manifest.json",
+    )
+    p_train.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="random seed for the synthetic training data (default: 0)",
+    )
+    p_train.set_defaults(func=cmd_train)
+
+    p_eval = sub.add_parser(
+        "eval", help="backtest the per-module risk models and print metrics (PRD Step 3)"
+    )
+    p_eval.add_argument(
+        "--out",
+        default="",
+        help="optional directory for backtest.json + per-module model cards",
+    )
+    p_eval.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="random seed for the deterministic backtest (default: 0)",
+    )
+    p_eval.set_defaults(func=cmd_eval)
+
+    p_doctor = sub.add_parser(
+        "doctor", help="run the system self-check and report health (PRD Step 10)"
+    )
+    p_doctor.add_argument(
+        "--audit",
+        default="",
+        help="JSONL audit log whose hash-chain to verify (default: none)",
+    )
+    p_doctor.add_argument(
+        "--json",
+        action="store_true",
+        help="emit the diagnostics report as JSON instead of Markdown",
+    )
+    p_doctor.set_defaults(func=cmd_doctor)
+
+    p_serve = sub.add_parser(
+        "serve", help="serve the dashboard over HTTP/WebSocket (PRD Step 10)"
+    )
+    p_serve.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="host/interface to bind (default: 127.0.0.1)",
+    )
+    p_serve.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="TCP port to bind (default: 8000)",
+    )
+    p_serve.set_defaults(func=cmd_serve)
 
     return parser
 

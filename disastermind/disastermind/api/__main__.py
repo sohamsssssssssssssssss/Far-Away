@@ -26,16 +26,19 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         prog="disastermind.api",
         description="Serve the DisasterMind Commander Dashboard (PRD Step 7 + 10).",
     )
+    # Hosted platforms (Railway/Heroku/Fly) inject $PORT and expect the process to
+    # bind 0.0.0.0 so their router can reach it; locally we stay on 127.0.0.1.
+    _hosted = bool(os.environ.get("PORT"))
     parser.add_argument(
         "--host",
-        default=os.environ.get("DM_API_HOST", "127.0.0.1"),
+        default=os.environ.get("DM_API_HOST") or ("0.0.0.0" if _hosted else "127.0.0.1"),
         help="Bind address (default: %(default)s; env DM_API_HOST).",
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=int(os.environ.get("DM_API_PORT", "8000")),
-        help="Bind port (default: %(default)s; env DM_API_PORT).",
+        default=int(os.environ.get("PORT") or os.environ.get("DM_API_PORT") or "8000"),
+        help="Bind port (default: %(default)s; env PORT / DM_API_PORT).",
     )
     return parser.parse_args(argv)
 
