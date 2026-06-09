@@ -5,6 +5,7 @@ import { Field } from './modules/field/Field'
 import { Report } from './modules/report/Report'
 import { SplashScreen } from './shell/SplashScreen'
 import { TopNav, type UnifiedModuleKey } from './shell/TopNav'
+import { OfflineBanner } from './components/OfflineBanner'
 
 function App() {
   const [activeModule, setActiveModule] = useState<UnifiedModuleKey>('dashboard')
@@ -32,6 +33,7 @@ function App() {
       </div>
 
       <SplashScreen visible={bootState !== 'ready'} />
+      <OfflineBanner />
     </div>
   )
 }
