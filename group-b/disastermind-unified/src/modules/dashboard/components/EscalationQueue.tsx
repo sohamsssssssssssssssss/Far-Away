@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, X } from 'lucide-react'
 import {
   disasterApi,
   type Escalation,
   type AgentMessage,
 } from '../../../lib/disasterApi'
+import { useEscalations } from '../../../hooks/useEscalations'
+import { EscalationMemoCard } from '../../../components/EscalationMemoCard'
 
 type EscalationState = 'pending' | 'approved' | 'overridden' | 'hidden'
-type QueueItem = {
+type OldQueueItem = {
   id: string
   title: string
   situation: string
@@ -19,12 +20,12 @@ type QueueItem = {
 type EscalationQueueProps = {
   backendOnline: boolean
   incomingMessage: AgentMessage | null
-  timelineEscalations?: QueueItem[]
+  timelineEscalations?: OldQueueItem[]
   onApproveZone7?: () => void
   zone7OverrideState?: 'pending' | 'auto-executing' | 'approved' | 'overridden' | 'removed'
 }
 
-const escalations = [
+const oldEscalations: OldQueueItem[] = [
   {
     id: 'evac-zone-7',
     title: 'MANDATORY EVACUATION - ZONE 7',
@@ -41,7 +42,7 @@ const escalations = [
     decisionRequiredBy: new Date(Date.now() + 167000).toISOString(),
     source: 'mock',
   },
-] satisfies QueueItem[]
+]
 
 function payloadText(payload: Record<string, unknown>, keys: string[], fallback: string) {
   for (const key of keys) {
@@ -50,7 +51,6 @@ function payloadText(payload: Record<string, unknown>, keys: string[], fallback:
       return value
     }
   }
-
   return fallback
 }
 
@@ -59,15 +59,13 @@ function escalationIdFromMessage(message: AgentMessage) {
   if (typeof payloadId === 'string' && payloadId.trim()) {
     return payloadId
   }
-
   if (typeof message.escalation_trigger === 'string' && message.escalation_trigger.trim()) {
     return message.escalation_trigger
   }
-
   return message.id
 }
 
-function messageToQueueItem(message: AgentMessage, decisionRequiredBy?: string): QueueItem {
+function messageToQueueItem(message: AgentMessage, decisionRequiredBy?: string): OldQueueItem {
   const fallbackSummary = message.reasoning[0] ?? 'Group A escalation requires commander review.'
   const title = payloadText(message.payload, ['title', 'summary', 'action'], 'GROUP A ESCALATION')
   const situation = payloadText(message.payload, ['situation', 'summary', 'description'], fallbackSummary)
@@ -87,7 +85,7 @@ function messageToQueueItem(message: AgentMessage, decisionRequiredBy?: string):
   }
 }
 
-function escalationToQueueItem(escalation: Escalation): QueueItem {
+function escalationToQueueItem(escalation: Escalation): OldQueueItem {
   return messageToQueueItem(escalation.message, escalation.decision_required_by)
 }
 
@@ -96,7 +94,6 @@ function formatCountdown(deadline: string, now: number) {
   const remainingSeconds = Math.max(0, Math.floor((target - now) / 1000))
   const minutes = Math.floor(remainingSeconds / 60).toString().padStart(2, '0')
   const seconds = (remainingSeconds % 60).toString().padStart(2, '0')
-
   return `${minutes}:${seconds}`
 }
 
@@ -107,53 +104,42 @@ export function EscalationQueue({
   onApproveZone7,
   zone7OverrideState,
 }: EscalationQueueProps) {
-  const [states, setStates] = useState<Record<string, EscalationState>>({})
-  const [backendEscalations, setBackendEscalations] = useState<QueueItem[]>([])
+  const { pending, resolved, approve, overrideItem } = useEscalations()
+  const [oldStates, setOldStates] = useState<Record<string, EscalationState>>({})
+  const [backendEscalations, setBackendEscalations] = useState<OldQueueItem[]>([])
   const [now, setNow] = useState(Date.now())
   const lastMessageIdRef = useRef<string | null>(null)
-  const activeEscalations = backendOnline
-    ? backendEscalations
-    : [...timelineEscalations, ...escalations]
-  const pendingCount = useMemo(
-    () => activeEscalations.filter((item) => (states[item.id] ?? 'pending') === 'pending').length,
-    [activeEscalations, states],
-  )
 
+  // 1-second tick for legacy countdowns
   useEffect(() => {
     const tickTimer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(tickTimer)
   }, [])
 
+  // Backend polling (same as before)
   useEffect(() => {
     let cancelled = false
-
     const loadEscalations = async () => {
       const result = (await disasterApi.escalations()) ?? []
-      const pendingEscalations = result
+      const pendingEsc = result
         .filter((item) => item.status === 'pending')
         .map(escalationToQueueItem)
-
       if (!cancelled) {
-        setBackendEscalations(pendingEscalations)
+        setBackendEscalations(pendingEsc)
       }
     }
-
     loadEscalations()
-
     if (!backendOnline) {
-      return () => {
-        cancelled = true
-      }
+      return () => { cancelled = true }
     }
-
     const pollTimer = window.setInterval(loadEscalations, 30000)
-
     return () => {
       cancelled = true
       window.clearInterval(pollTimer)
     }
   }, [backendOnline])
 
+  // Incoming WebSocket message → backend escalation
   useEffect(() => {
     if (
       !incomingMessage ||
@@ -162,55 +148,71 @@ export function EscalationQueue({
     ) {
       return
     }
-
     lastMessageIdRef.current = incomingMessage.id
     const nextEscalation = messageToQueueItem(incomingMessage)
-
     setBackendEscalations((current) => {
       if (current.some((item) => item.id === nextEscalation.id)) {
         return current
       }
-
       return [nextEscalation, ...current]
     })
   }, [incomingMessage])
 
-  const resolveEscalation = (id: string, next: 'approved' | 'overridden') => {
-    setStates((current) => ({ ...current, [id]: next }))
+  const allLegacyItems: OldQueueItem[] = backendOnline
+    ? backendEscalations
+    : [...timelineEscalations, ...oldEscalations]
+
+  // Count pending across all sources
+  const pendingCount = useMemo(() => {
+    const oldPending = allLegacyItems.filter(
+      (item) => (oldStates[item.id] ?? 'pending') === 'pending'
+    ).length
+    return pending.length + oldPending
+  }, [pending, allLegacyItems, oldStates])
+
+  const hasCriticalPending = useMemo(() => {
+    return pending.some(e => e.priority === 'CRITICAL')
+  }, [pending])
+
+  const resolveOldEscalation = (id: string, next: 'approved' | 'overridden') => {
+    setOldStates((current) => ({ ...current, [id]: next }))
     window.setTimeout(() => {
-      setStates((current) => ({ ...current, [id]: 'hidden' }))
+      setOldStates((current) => ({ ...current, [id]: 'hidden' }))
       setBackendEscalations((current) => current.filter((item) => item.id !== id))
     }, 1500)
   }
 
-  const approveItem = async (item: QueueItem) => {
+  const handleApproveOldItem = async (item: OldQueueItem) => {
     if (item.id === 'evac-zone-7-escalation') {
       onApproveZone7?.()
     }
     if (!backendOnline || item.source === 'mock') {
-      resolveEscalation(item.id, 'approved')
+      resolveOldEscalation(item.id, 'approved')
       return
     }
-
     if (await disasterApi.approveEscalation(item.id)) {
-      resolveEscalation(item.id, 'approved')
+      resolveOldEscalation(item.id, 'approved')
     }
   }
 
-  const overrideItem = async (item: QueueItem) => {
+  const handleOverrideOldItem = async (item: OldQueueItem) => {
     if (!backendOnline || item.source === 'mock') {
-      resolveEscalation(item.id, 'overridden')
+      resolveOldEscalation(item.id, 'overridden')
       return
     }
-
     const reason = window.prompt('Override reason')
-    if (reason === null) {
-      return
-    }
-
+    if (reason === null) return
     if (await disasterApi.rejectEscalation(item.id, reason)) {
-      resolveEscalation(item.id, 'overridden')
+      resolveOldEscalation(item.id, 'overridden')
     }
+  }
+
+  // Handle approve/override from EscalationMemoCard — also call demo callback if applicable
+  const handleCardApprove = (id: string) => {
+    if (id === 'evac-zone-7-escalation') {
+      onApproveZone7?.()
+    }
+    approve(id)
   }
 
   return (
@@ -229,7 +231,16 @@ export function EscalationQueue({
             {backendOnline ? 'LIVE' : 'MOCK'}
           </span>
         </h2>
-        <span className="count-badge">{pendingCount} PENDING</span>
+        <span
+          className="count-badge"
+          style={{
+            animation: hasCriticalPending ? 'pulse-red-once-anim 1.5s ease-out infinite' : undefined,
+            borderColor: hasCriticalPending ? '#ef4444' : undefined,
+            color: hasCriticalPending ? '#ef4444' : undefined,
+          }}
+        >
+          {pendingCount} PENDING
+        </span>
       </div>
       <style>{`
         @keyframes pulse-red-once-anim {
@@ -237,19 +248,25 @@ export function EscalationQueue({
           50% { box-shadow: 0 0 12px 6px rgba(255, 59, 59, 0.5); border-color: rgba(255, 59, 59, 0.6); }
           100% { box-shadow: 0 0 0 0 rgba(255, 59, 59, 0); }
         }
-        .pulse-once {
-          animation: pulse-red-once-anim 1.5s ease-out 1;
-        }
       `}</style>
-      <div className="escalation-list">
-        {activeEscalations.map((item) => {
+      <div className="escalation-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {/* New-style pending cards from useEscalations */}
+        {pending.map(item => (
+          <EscalationMemoCard
+            key={item.id}
+            item={item}
+            onApprove={handleCardApprove}
+            onOverride={overrideItem}
+          />
+        ))}
+
+        {/* Legacy timeline items (old format for demo compatibility) */}
+        {allLegacyItems.map((item) => {
           const isZone7 = item.id === 'evac-zone-7-escalation'
           const isAutoExecuting = isZone7 && zone7OverrideState === 'auto-executing'
-          const state = isAutoExecuting ? 'auto-executing' : (states[item.id] ?? 'pending')
-          
-          if (state === 'hidden') {
-            return null
-          }
+          const state = isAutoExecuting ? 'auto-executing' : (oldStates[item.id] ?? 'pending')
+
+          if (state === 'hidden') return null
           const isResolved = state !== 'pending' && state !== 'auto-executing'
           const cardTitle = isAutoExecuting
             ? '⚡ AUTO-EXECUTING — COMMANDER OVERRIDE WINDOW MISSED'
@@ -259,7 +276,10 @@ export function EscalationQueue({
             <article
               className={`escalation-card ${state} ${isResolved ? 'resolved' : ''} ${isZone7 && state === 'pending' ? 'pulse-once' : ''}`}
               key={item.id}
-              style={isAutoExecuting ? { background: '#ff3b3b', color: '#ffffff', borderColor: '#ff3b3b' } : undefined}
+              style={{
+                ...(isAutoExecuting ? { background: '#ff3b3b', color: '#ffffff', borderColor: '#ff3b3b' } : {}),
+                ...(isResolved ? { minHeight: 'auto', padding: '8px 10px' } : {}),
+              }}
             >
               <div className="escalation-head">
                 <h3 style={isAutoExecuting ? { color: '#ffffff' } : undefined}>{cardTitle}</h3>
@@ -268,12 +288,12 @@ export function EscalationQueue({
                 </span>
               </div>
               {isResolved ? (
-                <div className="resolution-state">
-                  {state === 'approved' ? <Check size={20} /> : <X size={20} />}
-                  {state === 'approved' ? 'APPROVED' : 'OVERRIDDEN'}
+                <div className="resolution-state" style={{ fontSize: '16px', gap: '6px' }}>
+                  {state === 'approved' ? '✓' : '✗'}
+                  {' '}{state === 'approved' ? 'APPROVED' : 'OVERRIDDEN'}
                 </div>
               ) : isAutoExecuting ? (
-                <div style={{ marginTop: '8px', fontSize: '11px', fontWeight: 700, opacity: 0.9 }}>
+                <div style={{ marginTop: '4px', fontSize: '11px', fontWeight: 700, opacity: 0.9 }}>
                   Evacuation order is being auto-issued by command authority.
                 </div>
               ) : (
@@ -283,10 +303,10 @@ export function EscalationQueue({
                     Recommended: {item.recommended}
                   </p>
                   <div className="escalation-actions">
-                    <button type="button" className="approve-btn" onClick={() => void approveItem(item)}>
+                    <button type="button" className="approve-btn" onClick={() => void handleApproveOldItem(item)}>
                       APPROVE
                     </button>
-                    <button type="button" className="override-btn" onClick={() => void overrideItem(item)}>
+                    <button type="button" className="override-btn" onClick={() => void handleOverrideOldItem(item)}>
                       OVERRIDE
                     </button>
                   </div>
@@ -295,6 +315,35 @@ export function EscalationQueue({
             </article>
           )
         })}
+
+        {/* Resolved log from new-style escalations */}
+        {resolved.length > 0 && (
+          <div style={{
+            borderTop: '1px solid rgba(58, 74, 107, 0.4)',
+            paddingTop: '8px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+          }}>
+            <span style={{
+              fontSize: '9px',
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              color: '#475569',
+              padding: '0 2px',
+            }}>
+              RESOLVED
+            </span>
+            {resolved.map(item => (
+              <EscalationMemoCard
+                key={item.id}
+                item={item}
+                onApprove={() => {}}
+                onOverride={() => {}}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   )

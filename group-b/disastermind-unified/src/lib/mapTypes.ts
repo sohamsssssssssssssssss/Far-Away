@@ -100,6 +100,46 @@ export const DEFAULT_SHAP: AgentDecisionShap = {
   ],
 }
 
+// ── Escalation types ───────────────────────────────────────────────────────────
+export type EscalationTrigger =
+  | 'CROSS_STATE_RESOURCE'
+  | 'MILITARY_ASSET'
+  | 'MANDATORY_EVACUATION'
+  | 'REQUISITION_INFRASTRUCTURE'
+  | 'MEDIA_BROADCAST'
+  | 'INTERNATIONAL_AID'
+  | 'STATE_OF_EMERGENCY'
+  | 'ARMED_FORCES'
+  | 'CRITICAL_INFRASTRUCTURE';
+
+// Human-only triggers — no auto-execute, no timeout
+export const HUMAN_ONLY_TRIGGERS: EscalationTrigger[] = [
+  'INTERNATIONAL_AID',
+  'STATE_OF_EMERGENCY',
+  'ARMED_FORCES',
+  'CRITICAL_INFRASTRUCTURE',
+];
+
+export interface EscalationMemo {
+  situation: string;      // 2-sentence summary
+  recommended: string;    // 1-sentence action
+  riskIfYes: string;      // 1-sentence consequence
+  riskIfNo: string;       // 1-sentence consequence
+}
+
+export interface EscalationItem {
+  id: string;
+  trigger: EscalationTrigger;
+  zone: string;
+  priority: 'CRITICAL' | 'HIGH' | 'MEDIUM';
+  memo: EscalationMemo;
+  createdAt: number;       // Date.now() timestamp
+  timeoutMs: number;       // default 300000 (5 min); Infinity for HUMAN_ONLY
+  status: 'PENDING' | 'APPROVED' | 'OVERRIDDEN' | 'AUTO_EXECUTED';
+  overrideReason?: string;
+  resolvedAt?: number;
+}
+
 // ── Shelter database ──────────────────────────────────────────────────────────
 export interface Shelter {
   id: string
