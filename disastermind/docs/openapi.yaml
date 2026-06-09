@@ -1,0 +1,272 @@
+openapi: 3.1.0
+info:
+  title: DisasterMind Commander Dashboard API
+  version: 0.1.0
+  description: |
+    HTTP + WebSocket API for the human Commander Dashboard (PRD Step 7 dashboard,
+    Step 10 refresh). Transport is a thin FastAPI layer
+    (`disastermind/api/app.py`) over the framework-free `DashboardService`
+    (`disastermind/api/service.py`); all policy/state lives in the service and
+    the live `CommanderAgent`.
+
+    The service is **read-mostly over the bus**: GET endpoints observe the
+    `MessageBus` history; approve/reject delegate to the Commander so every
+    dispatch/ACK still flows through the audited bus. This spec is derived from
+    the code and matches it field-for-field — it is not a target.
+
+    NOTE: OpenAPI does not natively model WebSockets. The live stream endpoint
+    `GET /ws` (Upgrade: websocket) is documented under "WebSocket /ws" below and
+    in the `WsSnapshot` / `Message` schemas.
+servers:
+  - url: http://localhost:8000
+    description: Local uvicorn (python -m disastermind serve --port 8000)
+  - url: /
+    description: Same-origin (e.g. behind the Vite dev-server proxy)
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness + a quick snapshot of system load (PRD Step 10).
+      responses:
+        "200":
+          description: Health snapshot.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  /topics:
+    get:
+      operationId: getTopics
+      summary: Per-topic message volume across the bus history (dashboard tiles).
+      responses:
+        "200":
+          description: Map of topic name to cumulative message count.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TopicCounts" }
+
+  /incidents:
+    get:
+      operationId: getIncidents
+      summary: Most-recent bus messages (newest last), JSON-able.
+      description: |
+        Returns the recent bus **messages** (`DashboardService.recent`) — NOT
+        the grouped-incident view. `limit` defaults to the service
+        `history_limit` (100); a non-positive value returns an empty list.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer }
+          description: Max number of recent messages to return.
+      responses:
+        "200":
+          description: Recent messages, oldest→newest.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Message" }
+
+  /escalations:
+    get:
+      operationId: getEscalations
+      summary: Open escalations awaiting a human decision.
+      description: Delegates to `CommanderAgent.pending_reports()`.
+      responses:
+        "200":
+          description: Open escalation rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Escalation" }
+
+  /escalations/{report_id}/approve:
+    post:
+      operationId: approveEscalation
+      summary: Human approves an escalation → Commander dispatches.
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: approver
+          in: query
+          required: false
+          schema: { type: string, default: human }
+      responses:
+        "200":
+          description: Approved; the orders the Commander dispatched.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApproveResult" }
+        "404":
+          description: No pending escalation with that id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HttpError" }
+
+  /escalations/{report_id}/reject:
+    post:
+      operationId: rejectEscalation
+      summary: Human rejects an escalation → Commander emits a rejection ACK.
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: approver
+          in: query
+          required: false
+          schema: { type: string, default: human }
+        - name: note
+          in: query
+          required: false
+          schema: { type: string, default: "" }
+      responses:
+        "200":
+          description: Rejected; the acknowledgement(s) emitted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RejectResult" }
+        "404":
+          description: No pending escalation with that id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HttpError" }
+
+  /ws:
+    get:
+      operationId: wsStream
+      summary: "WebSocket /ws — live stream of new bus messages (PRD Step 10)."
+      description: |
+        **WebSocket endpoint** (HTTP Upgrade). On connect the server sends one
+        snapshot frame, then one frame per new bus message:
+
+          1. first frame: `WsSnapshot` — `{ "kind": "snapshot", "topics": {…} }`
+          2. subsequent frames: a `Message` object (the bus envelope).
+
+        The connection is server-push only; clients do not send frames. This is
+        documented here for completeness — OpenAPI cannot fully model the
+        WebSocket protocol.
+      responses:
+        "101":
+          description: Switching Protocols (WebSocket handshake accepted).
+
+components:
+  schemas:
+    Health:
+      type: object
+      properties:
+        status: { type: string, example: ok }
+        commander: { type: [string, "null"], description: Commander agent name. }
+        messages_seen: { type: integer, description: Bus history length. }
+        pending_escalations: { type: integer }
+      required: [status, messages_seen, pending_escalations]
+
+    TopicCounts:
+      type: object
+      additionalProperties: { type: integer }
+      description: "Map of topic name → cumulative message count, e.g. {\"tier3.dispatch\": 12}."
+
+    Message:
+      type: object
+      description: Canonical inter-agent envelope — `core.contracts.Message.to_dict()`.
+      properties:
+        sender: { type: string }
+        recipient: { type: string }
+        type:
+          type: string
+          enum: [alert, instruction, query, acknowledgement, escalation]
+        priority:
+          type: integer
+          enum: [1, 2, 3, 4, 5]
+          description: 1=CRITICAL … 5=INFO.
+        payload: { type: object, additionalProperties: true }
+        reasoning:
+          type: array
+          items: { type: string }
+          description: Full reasoning chain (audit completeness, PRD Step 9).
+        ttl_seconds: { type: integer, default: 300 }
+        topic:
+          type: string
+          example: tier3.dispatch
+        incident_id: { type: [string, "null"] }
+        module:
+          type: string
+          enum: [A, B, C, ALL]
+        escalation_trigger: { type: [string, "null"] }
+        timestamp: { type: string, format: date-time }
+        id: { type: string, format: uuid }
+      required: [sender, recipient, type, priority, topic, module, timestamp, id]
+
+    Escalation:
+      type: object
+      description: Open escalation row — `CommanderAgent.pending_reports()`.
+      properties:
+        report_id: { type: string }
+        trigger:
+          type: [string, "null"]
+          enum:
+            - cross_state_resource_request
+            - military_asset_deployment
+            - mandatory_evacuation_gt_10000
+            - requisition_private_infrastructure
+            - media_broadcast_order
+            - international_aid_request
+            - declare_state_of_emergency
+            - armed_forces_in_civil_situation
+            - critical_national_infrastructure
+            - null
+        human_only:
+          type: boolean
+          description: True ⇒ Commander never auto-executes, even on timeout.
+        deadline_epoch:
+          type: number
+          description: Unix epoch (seconds) of the 5-minute auto-execute deadline.
+        status:
+          type: string
+          enum: [pending, approved, rejected, auto_executed, expired]
+        incident_id: { type: [string, "null"] }
+      required: [report_id, human_only, deadline_epoch, status]
+
+    ApproveResult:
+      type: object
+      properties:
+        report_id: { type: string }
+        action: { type: string, const: approve }
+        approver: { type: string }
+        ok: { type: boolean }
+        dispatched:
+          type: array
+          items: { $ref: "#/components/schemas/Message" }
+      required: [report_id, action, approver, ok, dispatched]
+
+    RejectResult:
+      type: object
+      properties:
+        report_id: { type: string }
+        action: { type: string, const: reject }
+        approver: { type: string }
+        note: { type: string }
+        ok: { type: boolean }
+        acks:
+          type: array
+          items: { $ref: "#/components/schemas/Message" }
+      required: [report_id, action, approver, note, ok, acks]
+
+    WsSnapshot:
+      type: object
+      description: First /ws frame — initial topic snapshot.
+      properties:
+        kind: { type: string, const: snapshot }
+        topics: { $ref: "#/components/schemas/TopicCounts" }
+      required: [kind, topics]
+
+    HttpError:
+      type: object
+      properties:
+        detail: { type: string }
+      required: [detail]
