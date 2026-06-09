@@ -17,8 +17,7 @@ import Map, {
   Popup,
   Source,
   type ViewStateChangeEvent,
-  type MarkerEvent,
-} from "react-map-gl";
+} from "react-map-gl/mapbox";
 
 import type { Message } from "../api/types";
 import { isEscalationish } from "../api/types";
@@ -33,7 +32,7 @@ const INITIAL_VIEW = {
   zoom: 4.5,
   pitch: 0,
   bearing: 0,
-} as const;
+};
 
 const MAP_STYLE = "mapbox://styles/mapbox/dark-v11";
 
@@ -97,8 +96,8 @@ function OrderMarker({
       longitude={dest.lon}
       latitude={dest.lat}
       anchor="center"
-      onClick={(e: MarkerEvent) => {
-        e.originalEvent.stopPropagation();
+      onClick={(e) => {
+        e.originalEvent?.stopPropagation();
         onClick(order);
       }}
     >
