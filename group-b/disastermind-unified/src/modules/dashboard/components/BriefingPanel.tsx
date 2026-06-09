@@ -1,161 +1,175 @@
-import { useState, useCallback } from 'react'
-import { Send, RefreshCw, Loader2 } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { generateSituationBriefing } from '../../../lib/situationBriefing'
-import type { SituationBriefing } from '../../../lib/situationBriefing'
+import type { BriefingContext } from '../../../lib/situationBriefing'
 
-export function BriefingPanel({ isRiverWarning = false }: { isRiverWarning?: boolean }) {
-  const [briefing, setBriefing] = useState<SituationBriefing | null>(null)
+const AUTO_INTERVAL_MS = 15 * 60 * 1000   // 15 minutes
+const COUNTDOWN_TICK_MS = 1000
+
+interface BriefingPanelProps {
+  context?: BriefingContext
+  className?: string
+}
+
+export function BriefingPanel({ context, className }: BriefingPanelProps) {
+  const [briefingText, setBriefingText] = useState<string>(
+    'Initialising situation briefing system...'
+  )
+  const [generatedAt, setGeneratedAt] = useState<string>('')
   const [loading, setLoading] = useState(false)
+  const [nextBriefingIn, setNextBriefingIn] = useState(AUTO_INTERVAL_MS / 1000)
+  const [sendToast, setSendToast] = useState<'idle' | 'sending' | 'sent'>('idle')
+  const autoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const generateBriefing = useCallback(async () => {
+  const generate = useCallback(async (ctx?: BriefingContext) => {
     setLoading(true)
     try {
-      const result = await generateSituationBriefing({
-        eventName: 'Cyclone Remal',
-        activeZones: ['Zone 7', 'Zone 4', 'Zone 2'],
-        agentDecisionsSince: [
-          'Rerouted 3 rescue boats to Zone 6',
-          'Activated evacuation route ALPHA-3',
-          'Elevated inundation risk in Zone 7 to HIGH',
-          'Dispatched 2 medical units to Puri shelter',
-          'Scaled back Zone 4 patrols by 1 unit',
-        ],
-        resourcesSummary: '15 boats, 5 helicopters, 10 medical units deployed',
-        populationAtRisk: 84000,
-        projectedNextHours: 'Inundation expected Zone 7 in 4.2 hours',
-        pendingEscalations: 1,
-      })
-      setBriefing(result)
-    } catch (err) {
-      console.error('Failed to generate briefing:', err)
+      const result = await generateSituationBriefing(ctx ?? context)
+      setBriefingText(result.text)
+      setGeneratedAt(result.generatedAt)
+    } catch {
+      setBriefingText(
+        'Briefing generation unavailable — LLM offline. Operating in degraded mode. ' +
+        'Last known status: Cyclone Remal, Category 3. Zones 6-7 high risk. ' +
+        '12 autonomous decisions executed. Shelters at 73% capacity.'
+      )
     } finally {
       setLoading(false)
+      setNextBriefingIn(AUTO_INTERVAL_MS / 1000)
+    }
+  }, [context])
+
+  // Auto-fire on mount
+  useEffect(() => {
+    generate()
+  }, [])
+
+  // Auto-fire every 15 minutes
+  useEffect(() => {
+    autoTimerRef.current = setInterval(() => {
+      generate()
+    }, AUTO_INTERVAL_MS)
+
+    return () => {
+      if (autoTimerRef.current) clearInterval(autoTimerRef.current)
+    }
+  }, [generate])
+
+  // Countdown ticker
+  useEffect(() => {
+    countdownRef.current = setInterval(() => {
+      setNextBriefingIn(prev => (prev <= 1 ? AUTO_INTERVAL_MS / 1000 : prev - 1))
+    }, COUNTDOWN_TICK_MS)
+
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current)
     }
   }, [])
 
-  const formattedTime = briefing
-    ? new Date(briefing.generatedAt).toLocaleTimeString('en-GB', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      })
-    : null
+  const formatCountdown = (seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0')
+    const s = (seconds % 60).toString().padStart(2, '0')
+    return `${m}:${s}`
+  }
+
+  const formatTime = (iso: string) => {
+    if (!iso) return '--:--'
+    return new Date(iso).toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  const handleSendToOfficials = () => {
+    setSendToast('sending')
+    setTimeout(() => {
+      setSendToast('sent')
+      setTimeout(() => setSendToast('idle'), 3000)
+    }, 1200)
+  }
 
   return (
-    <section className="panel briefing-panel">
-      <style>{`
-        @keyframes flash-red-gauge {
-          0%, 100% { background: rgba(10, 13, 20, 0.5); border-color: rgba(58, 74, 107, 0.68); }
-          50% { background: rgba(255, 59, 59, 0.3); border-color: #ff3b3b; box-shadow: 0 0 10px rgba(255, 59, 59, 0.5); }
-        }
-        .flash-red {
-          animation: flash-red-gauge 0.75s infinite;
-        }
-        .briefing-actions {
-          display: flex;
-          gap: 8px;
-          margin-top: 12px;
-        }
-        .briefing-actions button {
-          flex: 1;
-        }
-        .briefing-meta {
-          margin-top: 8px;
-          font-size: 10px;
-          color: var(--text-secondary);
-          font-family: var(--font-mono);
-          text-align: center;
-        }
-        .briefing-loading {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          padding: 16px 0;
-          color: var(--accent-primary);
-          font-family: var(--font-mono);
-          font-size: 11px;
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        .briefing-spinner {
-          animation: spin 1s linear infinite;
-        }
-      `}</style>
+    <section className={`panel briefing-panel ${className ?? ''}`} style={{ display: 'flex', flexDirection: 'column', gap: '8px', position: 'relative' }}>
+      {/* Header */}
       <div className="panel-title">
-        <h2>{briefing ? 'SITUATION BRIEFING' : 'LAST BRIEFING - 06:30:00'}</h2>
-        <span>LLM SITREP</span>
-      </div>
-
-      {/* Mahanadi River Gauge telemetry display */}
-      <div className={`gauge-indicator-container ${isRiverWarning ? 'flash-red' : ''}`} style={{
-        padding: '8px 12px',
-        border: '1px solid rgba(58, 74, 107, .68)',
-        background: 'rgba(10, 13, 20, 0.4)',
-        borderRadius: '4px',
-        marginBottom: '12px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        transition: 'all 0.3s ease'
-      }}>
-        <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'var(--font-heading)' }}>
-          MAHANADI RIVER GAUGE
-        </span>
-        <strong style={{
-          fontSize: '13px',
-          color: isRiverWarning ? '#ff3b3b' : 'var(--accent-primary)',
-          fontFamily: 'var(--font-mono)'
-        }}>
-          {isRiverWarning ? '98.7% CRITICAL' : '91.2% WARNING'}
-        </strong>
-      </div>
-
-      {loading ? (
-        <div className="briefing-loading">
-          <Loader2 size={16} className="briefing-spinner" />
-          <span>Generating situation briefing…</span>
+        <div>
+          <h2>SITUATION BRIEFING</h2>
+          {generatedAt && (
+            <span style={{ fontSize: '10px', color: '#64748b', marginLeft: '8px' }}>
+              {formatTime(generatedAt)}
+            </span>
+          )}
         </div>
-      ) : briefing ? (
-        <>
-          <div className="briefing-copy">
-            {briefing.text}
-          </div>
-          <div className="briefing-meta">
-            Generated {formattedTime} via {briefing.provider}
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="briefing-copy">
-            Since the last briefing, Cyclone Remal has intensified to Category 3. Inundation risk in Zones 6 and 7 has been elevated to HIGH by FLOOD-AI. The system has autonomously rerouted 3 rescue boats and activated evacuation route ALPHA-3. Currently 847 civilians have been moved to shelters; Puri shelter is at 73% capacity. In the next 2 hours, river gauge levels are projected to breach danger threshold in Zone 7. Two escalations require commander attention: mandatory evacuation order for Zone 7 (14,200 residents) and a cross-state boat request.
-          </div>
-          <div className="next-briefing">
-            <span>NEXT BRIEFING IN</span>
-            <strong>14:32</strong>
-          </div>
-        </>
-      )}
+        <span style={{ fontSize: '10px', color: '#64748b' }}>
+          NEXT IN <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{formatCountdown(nextBriefingIn)}</span>
+        </span>
+      </div>
 
-      <div className="briefing-actions">
-        {briefing ? (
-          <button type="button" className="officials-btn" onClick={generateBriefing}>
-            <RefreshCw size={16} />
-            REFRESH
-          </button>
-        ) : (
-          <button type="button" className="officials-btn" onClick={generateBriefing}>
-            <Send size={16} />
-            GENERATE BRIEFING
-          </button>
-        )}
-        <button type="button" className="officials-btn" disabled={!briefing}>
-          <Send size={16} />
-          SEND TO OFFICIALS
+      {/* Briefing text */}
+      <div className="briefing-copy" style={{
+        fontSize: '12px',
+        lineHeight: '1.6',
+        color: loading ? '#64748b' : '#cbd5e1',
+        minHeight: '80px',
+        fontStyle: loading ? 'italic' : 'normal',
+      }}>
+        {loading ? '● Generating briefing...' : briefingText}
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: '8px', padding: '0 12px', marginTop: '4px' }}>
+        <button
+          onClick={() => generate()}
+          disabled={loading}
+          className="officials-btn"
+          style={{
+            flex: 1,
+            background: 'transparent',
+            border: '1px solid rgba(255,255,255,0.15)',
+            color: loading ? '#64748b' : '#e2e8f0',
+            cursor: loading ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {loading ? 'GENERATING...' : '↻ GENERATE'}
+        </button>
+        <button
+          onClick={handleSendToOfficials}
+          disabled={loading || sendToast !== 'idle'}
+          className={sendToast === 'sent' ? '' : 'officials-btn'}
+          style={{
+            flex: 1,
+            background: sendToast === 'sent' ? '#16a34a' : 'transparent',
+            border: `1px solid ${sendToast === 'sent' ? '#16a34a' : 'rgba(255,255,255,0.15)'}`,
+            color: sendToast === 'sent' ? '#fff' : '#e2e8f0',
+            cursor: (loading || sendToast !== 'idle') ? 'not-allowed' : 'pointer',
+            transition: 'all 0.3s ease',
+          }}
+        >
+          {sendToast === 'sending' ? '● DISPATCHING...' :
+           sendToast === 'sent' ? '✓ DISPATCHED' :
+           '⇪ SEND TO OFFICIALS'}
         </button>
       </div>
+
+      {/* Dispatch toast */}
+      {sendToast === 'sent' && (
+        <div style={{
+          position: 'absolute',
+          bottom: '48px',
+          left: '12px',
+          right: '12px',
+          background: '#16a34a',
+          color: '#fff',
+          fontSize: '11px',
+          fontWeight: 600,
+          padding: '8px 12px',
+          borderRadius: '4px',
+          textAlign: 'center',
+          animation: 'fadeIn 0.2s ease',
+        }}>
+          ✓ Briefing dispatched via SMS + WhatsApp to 6 registered officials
+        </div>
+      )}
     </section>
   )
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useApiStatus } from '../../hooks/useApiStatus'
+import { useMemo } from 'react'
 import { connectWebSocket } from '../../lib/disasterApi'
 import type { AgentMessage, WSConnectionState } from '../../lib/disasterApi'
 import { AgentFeed } from './components/AgentFeed'
@@ -33,7 +34,6 @@ export function Dashboard() {
   const connectionState: WSConnectionState = status.backendOnline ? status.wsState : 'offline'
 
   // Demo Timeline States
-  const [isRiverWarningActive, setIsRiverWarningActive] = useState(false)
   const [customFeedEntry, setCustomFeedEntry] = useState<{
     agent: string
     summary: string
@@ -55,9 +55,6 @@ export function Dashboard() {
     elapsedSeconds
   } = useDemoTimeline({
     onRiverWarning: () => {
-      setIsRiverWarningActive(true)
-      setTimeout(() => setIsRiverWarningActive(false), 3000)
-
       setCustomFeedEntry({
         agent: 'FLOOD-AI',
         summary: 'Mahanadi river gauge CRITICAL — 98.7% capacity. Breach probability 84% within 6 hours.',
@@ -128,7 +125,6 @@ export function Dashboard() {
 
   const handleStartDemo = () => {
     // Reset all states
-    setIsRiverWarningActive(false)
     setCustomFeedEntry(null)
     setTimelineEscalations([])
     setZone7OverrideState('pending')
@@ -142,6 +138,18 @@ export function Dashboard() {
     setZone7OverrideState('approved')
     setEscalationApproved(true)
   }
+
+  const briefingContext = useMemo(() => ({
+    activeZones: ['Zone 6', 'Zone 7'],
+    agentDecisionCount: 12,
+    deployedBoats: 12,
+    deployedHelicopters: 4,
+    shelterUtilisation: 73,
+    topRiskZone: 'Zone 7',
+    topRiskProbability: 0.92,
+    lastEscalation: 'Mandatory evacuation — Zone 7',
+    minutesSinceLastBriefing: 15,
+  }), [])
 
   // GPS drift simulation — every 8 seconds, jiggle team positions slightly
   useEffect(() => {
@@ -353,7 +361,9 @@ export function Dashboard() {
             onApproveZone7={handleApproveZone7}
             zone7OverrideState={zone7OverrideState}
           />
-          <BriefingPanel isRiverWarning={isRiverWarningActive} />
+          <BriefingPanel
+            context={briefingContext}
+          />
         </aside>
       </section>
     </main>

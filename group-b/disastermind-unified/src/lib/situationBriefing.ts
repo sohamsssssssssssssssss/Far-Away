@@ -1,50 +1,67 @@
-import { promptLLM } from './llm';
+import { promptLLM } from './llm'
 
-export interface BriefingState {
-  eventName: string;           // e.g. "Cyclone Remal"
-  activeZones: string[];       // e.g. ["Zone 7", "Zone 4"]
-  agentDecisionsSince: string[]; // last N agent decisions as plain strings
-  resourcesSummary: string;    // e.g. "15 boats, 5 helicopters deployed"
-  populationAtRisk: number;    // e.g. 84000
-  projectedNextHours: string;  // e.g. "Inundation expected Zone 7 in 4.2 hours"
-  pendingEscalations: number;  // count
+export interface BriefingContext {
+  activeZones?: string[]
+  agentDecisionCount?: number
+  deployedBoats?: number
+  deployedHelicopters?: number
+  shelterUtilisation?: number   // 0-100
+  topRiskZone?: string
+  topRiskProbability?: number   // 0-1
+  lastEscalation?: string
+  minutesSinceLastBriefing?: number
 }
 
 export interface SituationBriefing {
-  text: string;           // 200-word plain language briefing
-  generatedAt: string;    // ISO timestamp
-  provider: string;       // which LLM generated it
+  text: string
+  generatedAt: string
+  context: BriefingContext
 }
 
 export async function generateSituationBriefing(
-  state: BriefingState
+  context: BriefingContext = {}
 ): Promise<SituationBriefing> {
-  const systemPrompt = `You are DisasterMind's briefing officer. Generate concise,
-factual situation briefings for senior government officials and NDRF commanders.
-Write in plain language. Maximum 200 words. No bullet points — flowing paragraphs.
-Use specific numbers. Be direct about risks. Never use jargon.`;
+  const {
+    activeZones = ['Zone 6', 'Zone 7'],
+    agentDecisionCount = 12,
+    deployedBoats = 12,
+    deployedHelicopters = 4,
+    shelterUtilisation = 73,
+    topRiskZone = 'Zone 7',
+    topRiskProbability = 0.92,
+    lastEscalation = 'Mandatory evacuation — Zone 7',
+    minutesSinceLastBriefing = 15,
+  } = context
 
-  const userMessage = `Generate a situation briefing for the following state:
+  const systemPrompt = 'You are a professional disaster management AI briefing system. Be concise, factual, and authoritative.'
 
-Event: ${state.eventName}
-Active Zones: ${state.activeZones.join(', ')}
-Population at Risk: ${state.populationAtRisk.toLocaleString()}
-Resources Deployed: ${state.resourcesSummary}
-Projection: ${state.projectedNextHours}
-Pending Escalations: ${state.pendingEscalations}
+  const userMessage = `You are the AI briefing system for DisasterMind, an autonomous disaster response platform deployed during Cyclone Remal hitting the Odisha coast of India.
 
-Recent autonomous decisions:
-${state.agentDecisionsSince.slice(0, 5).map((d, i) => `${i + 1}. ${d}`).join('\n')}
+Generate a situation briefing for state disaster management officials. Write in plain, professional language. Maximum 200 words. No bullet points — flowing prose only.
 
-Cover: what has happened, what the system has done autonomously,
-current resource deployment, projection for next 2 hours,
-any escalations requiring commander attention.`;
+Current system state:
+- Active high-risk zones: ${activeZones.join(', ')}
+- Autonomous agent decisions in last ${minutesSinceLastBriefing} minutes: ${agentDecisionCount}
+- Resources deployed: ${deployedBoats} boats, ${deployedHelicopters} helicopters
+- Average shelter utilisation: ${shelterUtilisation}%
+- Highest risk zone: ${topRiskZone} at ${Math.round(topRiskProbability * 100)}% inundation probability
+- Last escalation sent to commanders: ${lastEscalation}
+- Time since last briefing: ${minutesSinceLastBriefing} minutes
 
-  const text = await promptLLM(systemPrompt, userMessage);
+The briefing must cover:
+1. What has happened since the last briefing
+2. What the system has done autonomously
+3. Current resource deployment status
+4. What is projected in the next 2 hours
+5. Any escalations requiring commander attention
+
+Begin directly with the briefing. No preamble.`
+
+  const text = await promptLLM(systemPrompt, userMessage)
 
   return {
     text,
     generatedAt: new Date().toISOString(),
-    provider: 'llm',
-  };
+    context,
+  }
 }
