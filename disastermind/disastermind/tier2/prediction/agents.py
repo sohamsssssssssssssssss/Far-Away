@@ -102,6 +102,23 @@ def _extract_event(payload: dict) -> dict | None:
     return ev if isinstance(ev, dict) else None
 
 
+def _shap_features(shap: dict[str, float] | None) -> list[dict]:
+    """Convert a ``{feature: signed_value}`` SHAP dict into the dashboard wire
+    shape ``[{feature, value, direction}]`` (most-influential first) — PRD Step 9
+    explainability surfaced on the WebSocket payload, not just the audit log."""
+    out: list[dict] = []
+    for feat, val in (shap or {}).items():
+        try:
+            v = float(val)
+        except (TypeError, ValueError):
+            continue
+        out.append(
+            {"feature": str(feat), "value": round(v, 4), "direction": "up" if v >= 0 else "down"}
+        )
+    out.sort(key=lambda d: abs(d["value"]), reverse=True)
+    return out
+
+
 class _PredictionAgent(BaseAgent):
     """Shared Tier 2 prediction plumbing.
 
@@ -139,9 +156,11 @@ class _PredictionAgent(BaseAgent):
         fire_fronts: list[FireFront],
         reasoning: list[str],
         priority: Priority,
+        shap: dict[str, float] | None = None,
     ) -> Message:
         payload = {
             "kind": "risk",
+            "shap_features": _shap_features(shap),
             "incident_id": incident_id,
             "module": self.module.value,
             "risk_cells": [asdict(c) for c in risk_cells],
@@ -241,7 +260,7 @@ class CyclonePredictionAgent(_PredictionAgent):
             f"population at risk={sum(c.population_at_risk for c in cells)}",
         ]
         priority = Priority.CRITICAL if peak >= 0.6 else Priority.HIGH
-        return [self._publish_prediction(incident_id, cells, [], [], reasoning, priority)]
+        return [self._publish_prediction(incident_id, cells, [], [], reasoning, priority, shap=attrib["shap"])]
 
     def _predict_cells(
         self,
@@ -252,7 +271,7 @@ class CyclonePredictionAgent(_PredictionAgent):
         severity: float,
         observations: list,
     ) -> tuple[list[RiskCell], dict]:
-        """Try ensemble (XGBoost + U-Net), else deterministic heuristic."""
+        """Try real model (XGBoost ensemble), else deterministic heuristic."""
         ensemble = self._try_ensemble(
             epicentre, rainfall_mm, surge_m, river_level_m, severity, observations
         )
@@ -262,16 +281,54 @@ class CyclonePredictionAgent(_PredictionAgent):
             epicentre, rainfall_mm, surge_m, river_level_m, severity, observations
         )
 
-    def _try_ensemble(self, *args) -> tuple[list[RiskCell], dict] | None:
-        """Lazy XGBoost + U-Net ensemble. Returns None to trigger fallback."""
+    def _try_ensemble(
+        self,
+        epicentre: LatLon,
+        rainfall_mm: float,
+        surge_m: float,
+        river_level_m: float,
+        severity: float,
+        observations: list,
+    ) -> tuple[list[RiskCell], dict] | None:
+        """Real model layer (:mod:`disastermind.ml`) inundation path.
+
+        Only engages when a *trained real backend* is loaded for Module A
+        (``model._backend_obj is not None``). It then derives the base hazard
+        probability from ``model.predict_one`` and sources the SHAP attribution
+        from the real explainer, reusing the SAME spreading lattice as the
+        heuristic via ``base_override``. With no trained artefact (the default —
+        nothing ships) it returns ``None`` so the deterministic heuristic runs
+        byte-identically.
+        """
         try:
-            import numpy as np  # noqa: F401
-            import xgboost  # noqa: F401  # type: ignore
+            from ... import ml  # lazy: keep stdlib import path clean
         except Exception:
             return None
-        # Real ensemble (trained boosters + CNN weights) would be wired here.
-        # No artefacts ship with the repo, so signal fallback deterministically.
-        return None
+        try:
+            model = ml.get_model(self.module)
+            if getattr(model, "_backend_obj", None) is None:
+                return None  # no trained backend -> deterministic fallback
+            raw = {
+                "rainfall_mm": rainfall_mm,
+                "storm_surge_m": surge_m,
+                "river_level_m": river_level_m,
+            }
+            fv = ml.features.features_for_module(self.module, raw)
+            base = float(model.predict_one(fv))
+            shap = ml.shap_explain.explain_dict(model, fv)
+        except Exception:
+            return None
+        return self._heuristic_cells(
+            epicentre,
+            rainfall_mm,
+            surge_m,
+            river_level_m,
+            severity,
+            observations,
+            base_override=base,
+            shap_override=shap,
+            model_name="flood-inundation-ml",
+        )
 
     def _heuristic_cells(
         self,
@@ -281,13 +338,19 @@ class CyclonePredictionAgent(_PredictionAgent):
         river_level_m: float,
         severity: float,
         observations: list,
+        base_override: float | None = None,
+        shap_override: dict | None = None,
+        model_name: str = "flood-inundation-heuristic",
     ) -> tuple[list[RiskCell], dict]:
-        """Deterministic per-100m-cell inundation heuristic (stdlib fallback).
+        """Deterministic per-100m-cell inundation spread (ONE shared impl).
 
         Base hazard rises with rainfall, surge and river level; probability
         decays with distance from the epicentre and grows toward later horizons
         as accumulated water spreads. population_at_risk scales the local
-        baseline by the cell probability.
+        baseline by the cell probability. When ``base_override`` is supplied (the
+        real-model path) it replaces the heuristic base probability and
+        ``shap_override`` replaces the per-driver attribution, while the spatial
+        spreading lattice below is shared verbatim by both paths.
         """
         size_m = 100
         # Normalised driver scores in [0, 1].
@@ -295,6 +358,8 @@ class CyclonePredictionAgent(_PredictionAgent):
         s_surge = _clamp01(surge_m / 6.0)
         s_river = _clamp01((river_level_m - 1.0) / 7.0)
         base = 0.45 * s_rain + 0.30 * s_surge + 0.25 * s_river
+        if base_override is not None:
+            base = _clamp01(float(base_override))
 
         # Per-driver SHAP-style attribution toward the peak (T+24h, centre) cell.
         shap = {
@@ -302,6 +367,8 @@ class CyclonePredictionAgent(_PredictionAgent):
             "storm_surge_m": round(0.30 * s_surge, 4),
             "river_level_m": round(0.25 * s_river, 4),
         }
+        if shap_override is not None:
+            shap = {k: round(float(v), 4) for k, v in shap_override.items()}
 
         # 5x5 lattice of 100 m cells centred on the epicentre.
         cells: list[RiskCell] = []
@@ -330,7 +397,7 @@ class CyclonePredictionAgent(_PredictionAgent):
                             shap=shap,
                         )
                     )
-        return cells, {"model": "flood-inundation-heuristic", "shap": shap}
+        return cells, {"model": model_name, "shap": shap}
 
 
 # --------------------------------------------------------------------------- B
@@ -409,7 +476,7 @@ class EarthquakeImpactAgent(_PredictionAgent):
             f"{len(zones)} rescue-priority zones (peak P(collapse)={peak_collapse:.2f})",
         ]
         priority = Priority.CRITICAL if peak_collapse >= 0.4 or total_trapped >= 25 else Priority.HIGH
-        return [self._publish_prediction(incident_id, zones, impacts, [], reasoning, priority)]
+        return [self._publish_prediction(incident_id, zones, impacts, [], reasoning, priority, shap=attrib["shap"])]
 
     def _assess_buildings(
         self, epicentre: LatLon, magnitude: float, depth_km: float, buildings_in: list
@@ -419,22 +486,88 @@ class EarthquakeImpactAgent(_PredictionAgent):
             return hazus
         return self._heuristic_buildings(epicentre, magnitude, depth_km, buildings_in)
 
-    def _try_hazus(self, *args) -> tuple[list[BuildingImpact], list[RiskCell], dict] | None:
-        """Lazy HAZUS/sklearn fragility model. Returns None to trigger fallback."""
+    def _try_hazus(
+        self, epicentre: LatLon, magnitude: float, depth_km: float, buildings_in: list
+    ) -> tuple[list[BuildingImpact], list[RiskCell], dict] | None:
+        """Real model layer (:mod:`disastermind.ml`) HAZUS fragility path.
+
+        Only engages when a *trained real backend* is loaded for Module B
+        (``model._backend_obj is not None``). The per-building collapse
+        probability is then derived from ``model.predict_one`` over the
+        ``(magnitude, distance_km, construction)`` feature vector, and the SHAP
+        attribution comes from the real explainer (keyed on the peak building),
+        while the SAME structural-spreading body (Poisson casualties + rescue
+        zones) is reused via ``base_override``. With no trained artefact (the
+        default — nothing ships) it returns ``None`` so the deterministic
+        ShakeMap-MMI fragility heuristic runs byte-identically.
+        """
         try:
-            import numpy as np  # noqa: F401
-            import sklearn  # noqa: F401  # type: ignore
+            from ... import ml  # lazy: keep stdlib import path clean
         except Exception:
             return None
-        return None  # no fitted fragility artefacts ship with the repo
+        try:
+            model = ml.get_model(self.module)
+            if getattr(model, "_backend_obj", None) is None:
+                return None  # no trained backend -> deterministic fallback
+            features_for_module = ml.features.features_for_module
+            explain_dict = ml.shap_explain.explain_dict
+        except Exception:
+            return None
+
+        def _model_collapse(dist_km: float, construction: str) -> float:
+            raw = {
+                "magnitude": magnitude,
+                "distance_km": dist_km,
+                "construction": construction,
+            }
+            fv = features_for_module(self.module, raw)
+            return _clamp01(float(model.predict_one(fv)))
+
+        def _model_shap(dist_km: float, construction: str) -> dict:
+            raw = {
+                "magnitude": magnitude,
+                "distance_km": dist_km,
+                "construction": construction,
+            }
+            fv = features_for_module(self.module, raw)
+            return explain_dict(model, fv)
+
+        try:
+            return self._heuristic_buildings(
+                epicentre,
+                magnitude,
+                depth_km,
+                buildings_in,
+                base_override=_model_collapse,
+                shap_override=_model_shap,
+                model_name="shakemap-fragility-ml",
+            )
+        except Exception:
+            return None
 
     def _heuristic_buildings(
-        self, epicentre: LatLon, magnitude: float, depth_km: float, buildings_in: list
+        self,
+        epicentre: LatLon,
+        magnitude: float,
+        depth_km: float,
+        buildings_in: list,
+        base_override: Any | None = None,
+        shap_override: Any | None = None,
+        model_name: str = "shakemap-fragility-heuristic",
     ) -> tuple[list[BuildingImpact], list[RiskCell], dict]:
-        """ShakeMap-MMI fragility fallback + Poisson casualty heuristic."""
+        """ShakeMap-MMI fragility + Poisson casualty spread (ONE shared impl).
+
+        ``base_override`` (when supplied by the real-model path) is a callable
+        ``(distance_km, construction) -> P(collapse)`` that replaces the logistic
+        fragility formula; the surrounding Poisson-casualty and rescue-zone
+        spreading code is shared verbatim by both paths. ``shap_override`` is a
+        callable that yields the real model's attribution dict for the peak
+        building.
+        """
         impacts: list[BuildingImpact] = []
         zone_acc: dict[str, dict] = {}
         shap_accum = {"magnitude": 0.0, "distance_km": 0.0, "construction": 0.0}
+        peak_for_shap: tuple[float, float, str] | None = None
         n = 0
 
         for raw in buildings_in:
@@ -450,8 +583,13 @@ class EarthquakeImpactAgent(_PredictionAgent):
             dist_km = epicentre.distance_m(loc) / 1000.0
             mmi = _mmi_from_magnitude(magnitude, dist_km, depth_km)
             frag = FRAGILITY.get(construction, FRAGILITY["unknown"])
-            # Logistic fragility: P(collapse) = sigmoid(slope*(MMI - threshold)).
-            collapse = _clamp01(_logistic(frag["slope"] * 8.0 * (mmi - frag["mmi_threshold"]) / 4.0))
+            if base_override is not None:
+                collapse = _clamp01(float(base_override(dist_km, construction)))
+            else:
+                # Logistic fragility: P(collapse) = sigmoid(slope*(MMI - threshold)).
+                collapse = _clamp01(_logistic(frag["slope"] * 8.0 * (mmi - frag["mmi_threshold"]) / 4.0))
+            if peak_for_shap is None or collapse > peak_for_shap[0]:
+                peak_for_shap = (collapse, dist_km, construction)
             # Poisson mean trapped = occupants * collapse * entrapment factor.
             lam = occupants * collapse * 0.55
             trapped = int(round(lam))
@@ -499,7 +637,16 @@ class EarthquakeImpactAgent(_PredictionAgent):
 
         denom = max(1.0, sum(shap_accum.values()))
         shap = {k: round(v / denom, 4) for k, v in shap_accum.items()}
-        return impacts, zones, {"model": "shakemap-fragility-heuristic", "shap": shap}
+        if shap_override is not None and peak_for_shap is not None:
+            try:
+                _, peak_dist, peak_constr = peak_for_shap
+                shap = {
+                    k: round(float(v), 4)
+                    for k, v in shap_override(peak_dist, peak_constr).items()
+                }
+            except Exception:
+                pass
+        return impacts, zones, {"model": model_name, "shap": shap}
 
 
 # --------------------------------------------------------------------------- C
@@ -574,7 +721,7 @@ class FireSpreadAgent(_PredictionAgent):
             f"fronts at T+15/30/60min; critical infra threatened={threatened or 'none'}",
         ]
         priority = Priority.CRITICAL if threatened or intensity >= 2.0 else Priority.HIGH
-        return [self._publish_prediction(incident_id, [], [], fronts, reasoning, priority)]
+        return [self._publish_prediction(incident_id, [], [], fronts, reasoning, priority, shap=attrib["shap"])]
 
     def _spread_fronts(
         self,
@@ -589,15 +736,54 @@ class FireSpreadAgent(_PredictionAgent):
             return ca
         return self._heuristic_fronts(ignition, intensity, wind_speed, wind_dir_deg, infra)
 
-    def _try_ca(self, *args) -> tuple[list[FireFront], dict] | None:
-        """Lazy numpy-accelerated CA. Returns None to fall back to stdlib CA."""
+    def _try_ca(
+        self,
+        ignition: LatLon,
+        intensity: float,
+        wind_speed: float,
+        wind_dir_deg: float,
+        infra: list,
+    ) -> tuple[list[FireFront], dict] | None:
+        """Real model layer (:mod:`disastermind.ml`) cellular-automata path.
+
+        Only engages when a *trained real backend* is loaded for Module C
+        (``model._backend_obj is not None``). The base burn probability is then
+        derived from ``model.predict_one`` over the
+        ``(intensity, wind_speed_ms, base_fuel)`` feature vector and used to
+        modulate the rate-of-spread, so the projected perimeter reflects the
+        trained model; the SHAP attribution comes from the real explainer. The
+        SAME elliptical-perimeter spreading body is reused via ``base_override``.
+        With no trained artefact (the default — nothing ships) it returns
+        ``None`` so the deterministic stdlib CA runs byte-identically.
+        """
         try:
-            import numpy as np  # noqa: F401
+            from ... import ml  # lazy: keep stdlib import path clean
         except Exception:
             return None
-        # The stdlib CA below is already deterministic and dependency-free; we
-        # only branch to numpy when a large grid is needed. Default to fallback.
-        return None
+        try:
+            model = ml.get_model(self.module)
+            if getattr(model, "_backend_obj", None) is None:
+                return None  # no trained backend -> deterministic fallback
+            raw = {
+                "intensity": intensity,
+                "wind_speed_ms": wind_speed,
+                "base_fuel": _infra_density(infra),
+            }
+            fv = ml.features.features_for_module(self.module, raw)
+            base = _clamp01(float(model.predict_one(fv)))
+            shap = ml.shap_explain.explain_dict(model, fv)
+        except Exception:
+            return None
+        return self._heuristic_fronts(
+            ignition,
+            intensity,
+            wind_speed,
+            wind_dir_deg,
+            infra,
+            base_override=base,
+            shap_override=shap,
+            model_name="fire-cellular-automata-ml",
+        )
 
     def _heuristic_fronts(
         self,
@@ -606,16 +792,26 @@ class FireSpreadAgent(_PredictionAgent):
         wind_speed: float,
         wind_dir_deg: float,
         infra: list,
+        base_override: float | None = None,
+        shap_override: dict | None = None,
+        model_name: str = "fire-cellular-automata-heuristic",
     ) -> tuple[list[FireFront], dict]:
-        """Deterministic cellular-automata fire perimeter (stdlib fallback).
+        """Deterministic cellular-automata fire perimeter (ONE shared impl).
 
         The fire spreads outward at a base rate (m/min) boosted in the
         downwind direction. We grow an elliptical perimeter and, at each
         horizon, sample it as a polygon of LatLon points; infrastructure inside
-        the perimeter is flagged as threatened.
+        the perimeter is flagged as threatened. When ``base_override`` (a burn
+        probability in [0, 1] from the real model) is supplied, it scales the
+        rate-of-spread so the perimeter reflects the trained model, while the
+        elliptical spreading geometry below is shared verbatim by both paths.
         """
         # Base rate-of-spread in metres/minute, scaled by intensity and wind.
         base_ros = 4.0 + 6.0 * _clamp01(intensity / 3.0) + 1.5 * wind_speed
+        if base_override is not None:
+            # Map a burn probability in [0, 1] to a multiplier around 1.0 so a
+            # high-confidence model accelerates the projected perimeter.
+            base_ros *= 0.5 + float(base_override)
         wind_dir = math.radians(wind_dir_deg)
         eccentric = 1.0 + 0.15 * wind_speed  # downwind elongation factor
 
@@ -654,7 +850,9 @@ class FireSpreadAgent(_PredictionAgent):
             "wind_speed_ms": round((1.5 * wind_speed) / denom, 4),
             "base_fuel": round(4.0 / denom, 4),
         }
-        return fronts, {"model": "fire-cellular-automata-heuristic", "shap": shap}
+        if shap_override is not None:
+            shap = {k: round(float(v), 4) for k, v in shap_override.items()}
+        return fronts, {"model": model_name, "shap": shap}
 
 
 # --------------------------------------------------------------------------- utils
@@ -705,6 +903,17 @@ def _synthetic_building_inventory(epicentre: LatLon) -> list[dict]:
             }
         )
     return inv
+
+
+def _infra_density(infra: list) -> float:
+    """Built-up fuel proxy from the count of critical-infra entries.
+
+    ``base_fuel`` in the Module C feature schema proxies built density (more
+    structures => more fuel). We map the infra count to a small positive scalar
+    (>= 1.0) so the feature is well-conditioned even with no infra listed.
+    """
+    n = len(infra or [])
+    return 1.0 + float(n)
 
 
 def _parse_infra(infra: list) -> list[tuple[str, LatLon]]:
