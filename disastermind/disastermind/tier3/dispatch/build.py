@@ -28,14 +28,21 @@ from .channels import (
 from .router import DispatchRouter
 
 
-def build_channels(settings: Settings, dry_run: bool) -> list[Channel]:
-    """Instantiate every notification channel (PRD Step 8)."""
+def build_channels(
+    settings: Settings, dry_run: bool, *, live: bool | None = None
+) -> list[Channel]:
+    """Instantiate every notification channel (PRD Step 8).
+
+    ``dry_run`` is the master gate (default-on keeps the suite offline). ``live``
+    is an optional explicit override of the per-channel live switch; when left as
+    ``None`` each channel consults ``DM_DISPATCH_LIVE`` (default off).
+    """
     return [
-        SmsChannel(settings=settings, dry_run=dry_run),
-        FcmPushChannel(settings=settings, dry_run=dry_run),
-        IridiumChannel(settings=settings, dry_run=dry_run),
-        CapChannel(settings=settings, dry_run=dry_run),
-        FieldRadioChannel(settings=settings, dry_run=dry_run),
+        SmsChannel(settings=settings, dry_run=dry_run, live=live),
+        FcmPushChannel(settings=settings, dry_run=dry_run, live=live),
+        IridiumChannel(settings=settings, dry_run=dry_run, live=live),
+        CapChannel(settings=settings, dry_run=dry_run, live=live),
+        FieldRadioChannel(settings=settings, dry_run=dry_run, live=live),
     ]
 
 
@@ -46,8 +53,9 @@ def build_agents(bus: MessageBus, logger: DecisionLogger, settings: Settings) ->
     subscribers themselves, so only the router is returned to the orchestrator.
     """
     # Default to dry-run unless explicitly opted into live delivery — keeps tests
-    # and degraded operation network-free (PRD Step 10).
-    dry_run = os.environ.get("DM_DISPATCH_LIVE", "").lower() not in {"1", "true", "yes", "on"}
-    channels = build_channels(settings, dry_run=dry_run)
+    # and degraded operation network-free (PRD Step 10). The same switch arms the
+    # per-channel ``live`` flag so real sends actually fire when opted in.
+    live = os.environ.get("DM_DISPATCH_LIVE", "").lower() in {"1", "true", "yes", "on"}
+    channels = build_channels(settings, dry_run=not live, live=live)
     router = DispatchRouter(bus=bus, logger=logger, channels=channels, settings=settings)
     return [router]

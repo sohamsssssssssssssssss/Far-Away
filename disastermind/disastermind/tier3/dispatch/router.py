@@ -81,6 +81,25 @@ class DispatchRouter(BaseAgent):
             return [self.channels[aliases[key]]]
         return []
 
+    def _cap_targets(self, requested: Any, reasoning: list[str]) -> list[Channel]:
+        """Resolve a public_alert order to its broadcast channels, CAP first.
+
+        A public evacuation alert always goes out on CAP (the standards
+        emergency-broadcast envelope). The operator may additionally fan it out
+        (e.g. ``channel == "all"``); we honour that but guarantee the CAP channel
+        is present so the CAP 1.2 document is always rendered and recorded.
+        """
+        if requested in (None, "cap", "broadcast"):
+            base: list[Channel] = []
+        else:
+            base = self._select(requested)
+        if "cap" in self.channels and self.channels["cap"] not in base:
+            base = [self.channels["cap"]] + base
+            reasoning.append("public_alert: routed to CAP emergency broadcast")
+        elif "cap" not in self.channels:
+            reasoning.append("public_alert: no CAP channel configured")
+        return base
+
     def handle(self, message: Message) -> list[Message]:
         """Execute one DISPATCH order; ACK the Commander with the receipts."""
         if message.topic != Topic.DISPATCH:
@@ -94,8 +113,21 @@ class DispatchRouter(BaseAgent):
         if message.type is MessageType.ACK:
             return []
         requested = payload.get("channel")
-        targets = self._select(requested)
         reasoning: list[str] = []
+
+        # ---- CAP emergency-broadcast path (PRD Step 8) ------------------------
+        # A public evacuation alert (channel=="cap" or kind=="public_alert") that
+        # carries a DisasterEvent + multi-language PublicAlerts is rendered into a
+        # CAP 1.2 document by the CAP channel (via alerting.build_cap_alert). The
+        # CAP channel is always one of the broadcast targets for such an order.
+        is_public_alert = (
+            payload.get("kind") == "public_alert"
+            or (str(requested).lower() == "cap" and "public_alerts" in payload)
+        )
+        if is_public_alert:
+            targets = self._cap_targets(requested, reasoning)
+        else:
+            targets = self._select(requested)
 
         if not targets:
             if self._fallback_name and self._fallback_name in self.channels:
@@ -133,20 +165,37 @@ class DispatchRouter(BaseAgent):
         """Build the audit ACK summarising delivery back to the Commander."""
         delivered = sum(1 for r in receipts if r.get("status") in ("sent", "recorded"))
         failed = sum(1 for r in receipts if r.get("status") == "failed")
+        ack_payload: dict[str, Any] = {
+            "kind": "dispatch_ack",
+            "incident_id": message.incident_id,
+            "requested_channel": (message.payload or {}).get("channel"),
+            "delivered": delivered,
+            "failed": failed,
+            "receipts": receipts,
+        }
+        # Surface any rendered CAP 1.2 document at the top level so the audit trail
+        # (Step 9) and operator console can read the broadcast text directly.
+        cap_xml = self._cap_xml_from(receipts)
+        if cap_xml is not None:
+            ack_payload["cap_xml"] = cap_xml
         ack = message.reply(
             sender=self.name,
             type=MessageType.ACK,
-            payload={
-                "kind": "dispatch_ack",
-                "incident_id": message.incident_id,
-                "requested_channel": (message.payload or {}).get("channel"),
-                "delivered": delivered,
-                "failed": failed,
-                "receipts": receipts,
-            },
+            payload=ack_payload,
             reasoning=reasoning,
         )
         # ACKs are housekeeping; never higher priority than the order itself.
         ack.priority = Priority.LOW
         ack.topic = Topic.DISPATCH
         return ack
+
+    @staticmethod
+    def _cap_xml_from(receipts: list[dict[str, Any]]) -> str | None:
+        """Pull the rendered CAP XML out of a CAP-channel receipt, if any."""
+        for r in receipts:
+            if r.get("channel") != "cap":
+                continue
+            wire = r.get("wire")
+            if isinstance(wire, dict) and isinstance(wire.get("xml"), str):
+                return wire["xml"]
+        return None
