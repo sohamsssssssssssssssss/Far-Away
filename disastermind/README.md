@@ -66,7 +66,7 @@ degrade gracefully and lets any agent be swapped or scaled independently.
 
 ```bash
 # stdlib-only: no broker, solver, ML lib or network required
-python -m pytest -q                      # 38 + tests, all offline
+python -m pytest -q                      # 620 tests, all offline (stdlib only)
 
 python - <<'PY'                          # drive a synthetic disaster
 from disastermind.orchestration.build import build_system, should_activate, Signals
@@ -130,9 +130,14 @@ Elasticsearch / TimescaleDB / PostGIS / MinIO via `docker-compose.yml`.
 ## CLI
 
 ```bash
-python -m disastermind run --max-cycles 10      # drive the live loop
+python -m disastermind run --max-cycles 10           # drive the live loop
 python -m disastermind simulate A|B|C [--escalate]   # inject a synthetic scenario
+python -m disastermind train --out models/           # train per-module ML artifacts
+python -m disastermind eval                          # backtest models (AUC/Brier/ECE) + model cards
+python -m disastermind doctor                         # system self-check (DAG balance, config, audit)
+python -m disastermind serve                          # run the dashboard API (uvicorn)
 python -m disastermind verify-audit audit.jsonl      # check the hash-chain
+python -m disastermind.demo B                         # narrated end-to-end demo
 ```
 
 ## Extended surface
@@ -160,26 +165,29 @@ disastermind/
   core/        contracts (Message/Topic/enums), bus, BaseAgent, config
   models/      geo primitives + domain dataclasses
   audit/       hash-chained DecisionLogger
-  tier3/       ingestion · iot · dispatch        (no decision authority)
-  tier2/       prediction · cascade · resource · routing · field
+  tier3/       ingestion (+ live fetch) · iot · dispatch   (no decision authority)
+  tier2/       prediction (+ ml seam) · cascade · resource · routing · field
   tier1/       commander  (authority matrix + escalation)
   orchestration/ triggers (Step 1) + coordination loop (Step 10)
-  llm/         Group B escalation narrator (Anthropic + template fallback)
+  llm/         Group B escalation narrator + decision-support advisor
   storage/     PostGIS · TimescaleDB · Elasticsearch · MinIO repos + facade
-  api/         DashboardService + FastAPI/WebSocket dashboard
+  integrations/ real Kafka round-trip, PostGIS/Timescale SQL + DDL, ES query DSL, health
+  api/         DashboardService + FastAPI/WebSocket dashboard + uvicorn server
   runtime/     Kafka consumer + process runner
+  live/        LiveSystem (real backends) + live feed ingest + resilient polling
   observability/ metrics collector + Prometheus exposition + health
-  scenarios/   synthetic A/B/C scenario generators
-  llm/         escalation narrator + decision-support advisor (situation brief,
-               reallocation advice, multi-language public alerts)
-  security/    opt-in API auth + rate limiting + payload validation
-  integrations/ real Kafka round-trip, PostGIS/Timescale SQL + DDL, ES query DSL, health pings
-  ml/          XGBoost/sklearn risk models + SHAP behind heuristic fallbacks
-  multi_incident/ IncidentManager — concurrent incidents, one DAG per disaster
   tracing/     span recorder + all-topic trace collector (per-incident latency)
+  security/    opt-in API auth + rate limiting + payload validation
+  ml/          XGBoost/sklearn risk models + SHAP; training/ + eval/ (backtest, model cards)
+  multi_incident/ IncidentManager — concurrent incidents, one DAG per disaster
+  ops/         health/readiness, retry, circuit breaker, graceful shutdown, config check
+  alerting/    CAP 1.2 emergency-broadcast XML
+  fieldapp/    device contracts + MockFieldClient (closes dispatch→ACK→GPS loop)
   benchmarks/  load/throughput harness — python -m disastermind.benchmarks
   diagnostics/ system "doctor" — python -m disastermind.diagnostics
-  cli.py       python -m disastermind {run,simulate,verify-audit}
+  demo/        narrated end-to-end runner — python -m disastermind.demo
+  scenarios/   synthetic A/B/C scenario generators
+  cli.py       python -m disastermind {run,simulate,train,eval,doctor,serve,verify-audit}
 deploy/        k8s manifests + sql/schema.sql; Dockerfile, Makefile, CI
-tests/         unit + e2e + scenario + perf (409 tests, stdlib-only)
+tests/         unit + e2e + scenario + perf + integration (620 tests; integration gated by DM_INTEGRATION)
 ```

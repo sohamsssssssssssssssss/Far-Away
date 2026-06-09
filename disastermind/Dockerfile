@@ -32,16 +32,17 @@ ARG EXTRAS=""
 COPY pyproject.toml README.md ./
 COPY disastermind ./disastermind
 
-RUN pip install ".${EXTRAS}"
+# Install the package + the web-server deps (the default CMD serves the API via
+# uvicorn). They are kept out of the core runtime so the loop/CLI stay stdlib-only.
+RUN pip install ".${EXTRAS}" "fastapi>=0.110" "uvicorn[standard]>=0.29"
 
 # Non-root runtime user (least privilege for the dashboard / loop process).
 RUN useradd --create-home --uid 10001 disastermind \
     && chown -R disastermind:disastermind /app
 USER disastermind
 
-# Drive the live coordination loop by default (PRD Step 10). Override the CMD to
-# serve the dashboard API or run a scenario, e.g.:
-#   docker run disastermind simulate B
-#   docker run -p 8000:8000 disastermind \
-#       sh -c "uvicorn disastermind.api:create_app --factory --host 0.0.0.0 --port 8000"
-CMD ["python", "-m", "disastermind", "run"]
+# Serve the Commander Dashboard API by default — binds $PORT (Railway/Heroku/Fly)
+# on 0.0.0.0, else 127.0.0.1:8000. Override to drive the loop or a scenario, e.g.:
+#   docker run disastermind python -m disastermind run
+#   docker run disastermind python -m disastermind simulate B
+CMD ["python", "-m", "disastermind.api"]
