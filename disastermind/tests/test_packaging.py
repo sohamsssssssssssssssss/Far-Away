@@ -62,7 +62,9 @@ def test_dockerfile_uses_python_313_and_pip_install() -> None:
     text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     assert "python:3.13-slim" in text
     assert 'pip install ".' in text  # `pip install ".${EXTRAS}"`
-    assert '"python", "-m", "disastermind", "run"' in text
+    # Default CMD serves the dashboard API (binds $PORT for Railway/etc.); the
+    # coordination loop is still runnable via an override (`python -m disastermind run`).
+    assert '"python", "-m", "disastermind.api"' in text
 
 
 def test_makefile_has_required_targets() -> None:
