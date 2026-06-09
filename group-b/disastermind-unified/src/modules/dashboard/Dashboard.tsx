@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useApiStatus } from '../../hooks/useApiStatus'
 import { useMemo } from 'react'
+import { useOverrides } from '../../hooks/useOverrides'
 import { connectWebSocket } from '../../lib/disasterApi'
 import type { AgentMessage, WSConnectionState } from '../../lib/disasterApi'
 import { AgentFeed } from './components/AgentFeed'
@@ -90,6 +91,9 @@ export function Dashboard() {
   const [showAutoExecBanner, setShowAutoExecBanner] = useState(false)
   const [boatsAdjustment, setBoatsAdjustment] = useState(0)
   const [mapState, setMapState] = useState<MapState>(SYNTHETIC_MAP_STATE)
+
+  const { overrides, submitOverride } = useOverrides()
+  const [overrideLogOpen, setOverrideLogOpen] = useState(false)
 
   // Demo Timeline callbacks
   const {
@@ -391,6 +395,7 @@ export function Dashboard() {
             connectionState={connectionState}
             incomingMessage={latestMessage}
             customEntry={customFeedEntry}
+            onOverride={submitOverride}
           />
         </aside>
         <section className="center-column" aria-label="Operational map">
@@ -407,6 +412,78 @@ export function Dashboard() {
             onApproveZone7={handleApproveZone7}
             zone7OverrideState={zone7OverrideState}
           />
+          {/* Override Log */}
+          <section className="panel" style={{ display: 'flex', flexDirection: 'column' }}>
+            <button
+              onClick={() => setOverrideLogOpen(o => !o)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%',
+                padding: '8px 12px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#94a3b8',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', color: '#475569' }}>
+                  OVERRIDE LOG
+                </span>
+                <span style={{
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  color: overrides.length > 0 ? '#f59e0b' : '#475569',
+                }}>
+                  [{overrides.length} {overrides.length === 1 ? 'entry' : 'entries'}]
+                </span>
+              </div>
+              <span style={{ fontSize: '12px', transform: overrideLogOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                ▾
+              </span>
+            </button>
+            {overrideLogOpen && (
+              <div style={{ padding: '0 12px 8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {overrides.length === 0 ? (
+                  <div style={{ fontSize: '10px', color: '#475569', fontStyle: 'italic', padding: '4px 0' }}>
+                    No overrides logged this session
+                  </div>
+                ) : (
+                  overrides.map(rec => (
+                    <div
+                      key={rec.id}
+                      style={{
+                        fontSize: '10px',
+                        color: '#cbd5e1',
+                        borderTop: '1px solid rgba(255,255,255,0.04)',
+                        padding: '6px 0',
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                        <span style={{ color: '#64748b', fontSize: '9px' }}>
+                          {rec.id}  {rec.agentType}
+                        </span>
+                        <span style={{ color: '#475569', fontSize: '9px' }}>{rec.commanderId}</span>
+                        <span style={{ color: '#475569', fontSize: '9px', marginLeft: 'auto' }}>
+                          {new Date(rec.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+                        </span>
+                      </div>
+                      <div style={{ color: '#f59e0b', fontSize: '10px', fontStyle: 'italic', marginBottom: '2px' }}>
+                        "{rec.overrideReason}"
+                      </div>
+                      <div style={{ color: '#475569', fontSize: '9px' }}>
+                        Propagated to: {rec.propagatedTo.join(' · ')}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </section>
+
           <BriefingPanel
             context={briefingContext}
           />

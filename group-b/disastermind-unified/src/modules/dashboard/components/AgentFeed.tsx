@@ -5,6 +5,8 @@ import type { AgentMessage, WSConnectionState } from '../../../lib/disasterApi'
 import { ShapBadges } from '../../../components/ShapBadges'
 import { SYNTHETIC_SHAP, DEFAULT_SHAP } from '../../../lib/mapTypes'
 import type { AgentDecisionShap } from '../../../lib/mapTypes'
+import type { OverrideRecord } from '../../../lib/mapTypes'
+import { OverridePanel } from '../../../components/OverridePanel'
 
 type AgentEntry = {
   id: string
@@ -15,6 +17,8 @@ type AgentEntry = {
   severity?: 'critical' | 'high' | 'medium' | 'low' | 'info'
   isNew?: boolean
   shap?: AgentDecisionShap
+  overridden?: boolean
+  overrideRecord?: OverrideRecord
 }
 
 type AgentFeedProps = {
@@ -26,6 +30,7 @@ type AgentFeedProps = {
     detail: string
     severity?: 'critical' | 'high' | 'medium' | 'low' | 'info'
   } | null
+  onOverride?: (id: string, agentType: string, action: string, reason: string) => void
 }
 
 const initialEntries: AgentEntry[] = [
@@ -191,10 +196,19 @@ function mapMessageToEntry(message: AgentMessage): AgentEntry {
   }
 }
 
-export function AgentFeed({ connectionState, incomingMessage, customEntry }: AgentFeedProps) {
+export function AgentFeed({ connectionState, incomingMessage, customEntry, onOverride }: AgentFeedProps) {
   const [feedEntries, setFeedEntries] = useState<AgentEntry[]>(initialEntries)
   const [openEntry, setOpenEntry] = useState<string | null>('initial-064211')
   const [showShap, setShowShap] = useState(true)
+  const [overrideTarget, setOverrideTarget] = useState<{
+    id: string
+    agentType: string
+    action: string
+    reasoning: string
+    shapFeatures?: import('../../../lib/mapTypes').ShapFeature[]
+    confidence?: number
+  } | null>(null)
+  const [toast, setToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false })
   const feedListRef = useRef<HTMLDivElement | null>(null)
   const poolIndexRef = useRef(0)
   const liveIdRef = useRef(0)
@@ -300,7 +314,7 @@ export function AgentFeed({ connectionState, incomingMessage, customEntry }: Age
   }, [customEntry])
 
   return (
-    <section className="panel agent-panel">
+    <section className="panel agent-panel" style={{ position: 'relative' }}>
       <div className="panel-title">
         <h2>AGENT ACTIVITY</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -356,12 +370,109 @@ export function AgentFeed({ connectionState, incomingMessage, customEntry }: Age
                       shap={entry.shap ?? SYNTHETIC_SHAP[entry.agent] ?? DEFAULT_SHAP}
                     />
                   )}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                    {entry.overridden ? (
+                      <span style={{
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        color: '#f59e0b',
+                        letterSpacing: '0.05em',
+                      }}>
+                        ⚠ OVERRIDDEN  {entry.overrideRecord ? new Date(entry.overrideRecord.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false }) : ''}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const shap = entry.shap ?? SYNTHETIC_SHAP[entry.agent]
+                          setOverrideTarget({
+                            id: entry.id,
+                            agentType: entry.agent,
+                            action: entry.summary,
+                            reasoning: entry.detail,
+                            shapFeatures: shap?.topFeatures,
+                            confidence: shap?.modelConfidence,
+                          })
+                        }}
+                        style={{
+                          padding: '2px 8px',
+                          fontSize: '9px',
+                          fontWeight: 700,
+                          letterSpacing: '0.08em',
+                          background: 'rgba(239,68,68,0.1)',
+                          border: '1px solid rgba(239,68,68,0.3)',
+                          color: '#ef4444',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        OVERRIDE
+                      </button>
+                    )}
+                  </div>
                 </>
               )}
             </button>
           )
         })}
       </div>
+
+      {/* Override Panel */}
+      <OverridePanel
+        decision={overrideTarget}
+        onClose={() => setOverrideTarget(null)}
+        onConfirm={(reason) => {
+          if (!overrideTarget) return
+          // Mark as overridden locally
+          setFeedEntries(prev =>
+            prev.map(e =>
+              e.id === overrideTarget.id
+                ? {
+                    ...e,
+                    overridden: true,
+                    overrideRecord: {
+                      id: `override-${Date.now()}`,
+                      agentDecisionId: overrideTarget.id,
+                      agentType: overrideTarget.agentType,
+                      originalAction: overrideTarget.action,
+                      overrideReason: reason,
+                      commanderId: 'CDR-SOHAM',
+                      timestamp: Date.now(),
+                      propagatedTo: [],
+                    },
+                  }
+                : e
+            )
+          )
+          // Fire onOverride to parent for the audit log
+          overrideTarget && onOverride?.(overrideTarget.id, overrideTarget.agentType, overrideTarget.action, reason)
+          // Show toast
+          setToast({ message: 'Override logged. Propagated to dependent agents.', visible: true })
+          setTimeout(() => setToast({ message: '', visible: false }), 4000)
+        }}
+      />
+
+      {/* Toast */}
+      {toast.visible && (
+        <div style={{
+          position: 'absolute',
+          bottom: '8px',
+          left: '8px',
+          right: '8px',
+          background: '#1e293b',
+          border: '1px solid rgba(245,158,11,0.4)',
+          color: '#f59e0b',
+          fontSize: '10px',
+          fontWeight: 600,
+          padding: '8px 12px',
+          borderRadius: '4px',
+          textAlign: 'center',
+          zIndex: 20,
+          animation: 'fadeIn 0.2s ease',
+        }}>
+          {toast.message}
+        </div>
+      )}
     </section>
   )
 }

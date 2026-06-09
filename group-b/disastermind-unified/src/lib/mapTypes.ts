@@ -295,6 +295,18 @@ export const IMD_ALERTS: IMDAlert[] = [
   },
 ]
 
+// ── Override Records ─────────────────────────────────────────────────────────
+export interface OverrideRecord {
+  id: string;                  // override-[timestamp]
+  agentDecisionId: string;     // id of the AgentDecision being overridden
+  agentType: string;           // e.g. 'FLOOD-AI'
+  originalAction: string;      // the decision text that was overridden
+  overrideReason: string;      // commander's entered reason
+  commanderId: string;         // hardcoded 'CDR-SOHAM' for demo
+  timestamp: number;           // Date.now()
+  propagatedTo: string[];      // list of dependent agent types notified
+}
+
 // Synthetic fallback data — Odisha coast (Puri / Balasore / Cuttack)
 export const SYNTHETIC_MAP_STATE: MapState = {
   teams: {
