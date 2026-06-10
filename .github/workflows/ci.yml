@@ -144,7 +144,7 @@ jobs:
         run: docker build -t disastermind:scan .
 
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.28.0
         continue-on-error: true
         with:
           image-ref: disastermind:scan
@@ -155,7 +155,7 @@ jobs:
           exit-code: "0"
 
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.28.0
         continue-on-error: true
         with:
           scan-type: fs
@@ -188,7 +188,7 @@ jobs:
 
       - name: Generate CycloneDX SBOM
         # Produce a machine-readable bill of materials of the installed env.
-        run: cyclonedx-py environment --output-format JSON --outfile sbom.cdx.json
+        run: cyclonedx-py environment --output-format JSON -o sbom.cdx.json
 
       - name: Upload SBOM artefact
         uses: actions/upload-artifact@v4
