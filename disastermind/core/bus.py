@@ -32,8 +32,7 @@ class MessageBus(abc.ABC):
     @abc.abstractmethod
     def subscribe(self, topic: str, subscriber: str, callback: Callback) -> None: ...
 
-    @abc.abstractmethod
-    def close(self) -> None:  # pragma: no cover - optional override
+    def close(self) -> None:  # pragma: no cover - optional override  # noqa: B027
         pass
 
 
