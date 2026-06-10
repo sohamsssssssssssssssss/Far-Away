@@ -12,6 +12,10 @@ venv/
 # Frontend (clients/web — Vite + npm)
 node_modules/
 *.tsbuildinfo
+# Build / deploy artifacts — must never be committed (from ANY path, incl. a
+# stale group-b/ checkout): Vercel deploy config + Vite dependency cache.
+.vercel/
+.vite/
 
 # OS
 .DS_Store
