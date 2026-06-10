@@ -1,0 +1,101 @@
+{
+ "population_tags": [
+  [
+   "city",
+   "200500"
+  ]
+ ],
+ "shelters": [
+  {
+   "name": "Sanskrit College",
+   "kind": "college",
+   "area_m2": 16277,
+   "lat": 19.80144022,
+   "lon": 85.82689138
+  },
+  {
+   "name": "Jagannath Temple",
+   "kind": "place_of_worship",
+   "area_m2": 4989,
+   "lat": 19.8047174,
+   "lon": 85.81816958
+  },
+  {
+   "name": "Gundicha Temple",
+   "kind": "place_of_worship",
+   "area_m2": 21190,
+   "lat": 19.81667116,
+   "lon": 85.83956964000001
+  },
+  {
+   "name": "",
+   "kind": "place_of_worship",
+   "area_m2": 657,
+   "lat": 19.78661034,
+   "lon": 85.79577354
+  },
+  {
+   "name": "S C S Collage",
+   "kind": "college",
+   "area_m2": 47505,
+   "lat": 19.804536971428572,
+   "lon": 85.82988127142858
+  },
+  {
+   "name": "Bipad Tarini Chandi Bari",
+   "kind": "place_of_worship",
+   "area_m2": 855,
+   "lat": 19.7872614,
+   "lon": 85.797839
+  },
+  {
+   "name": "Fahther Marian Lepra Centre",
+   "kind": "hospital",
+   "area_m2": 5242,
+   "lat": 19.803717188888886,
+   "lon": 85.80525483333332
+  },
+  {
+   "name": "Sri Purusottam Math",
+   "kind": "place_of_worship",
+   "area_m2": 445,
+   "lat": 19.79662486,
+   "lon": 85.81363292
+  },
+  {
+   "name": "Bhajan Kutir of Bhakti Siddhanta Saraswati Goswami",
+   "kind": "place_of_worship",
+   "area_m2": 181,
+   "lat": 19.79690064,
+   "lon": 85.81343096
+  },
+  {
+   "name": "Ahulya Math",
+   "kind": "place_of_worship",
+   "area_m2": 40,
+   "lat": 19.80826302,
+   "lon": 85.82694936
+  },
+  {
+   "name": "",
+   "kind": "place_of_worship",
+   "area_m2": 414,
+   "lat": 19.79342812857143,
+   "lon": 85.81533642857143
+  },
+  {
+   "name": "",
+   "kind": "place_of_worship",
+   "area_m2": 241,
+   "lat": 19.80829854,
+   "lon": 85.82220738
+  },
+  {
+   "name": "",
+   "kind": "place_of_worship",
+   "area_m2": 254,
+   "lat": 19.808420820000002,
+   "lon": 85.8221271
+  }
+ ]
+}
