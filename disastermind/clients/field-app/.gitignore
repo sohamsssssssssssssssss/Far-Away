@@ -1,9 +1,0 @@
-node_modules/
-.expo/
-dist/
-*.log
-
-# OS / editor noise
-.DS_Store
-web-build/
-expo-env.d.ts

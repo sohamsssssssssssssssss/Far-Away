@@ -1,9 +1,8 @@
 # DisasterMind continuous integration (PRD Group A, Step 10 — productionisation).
 #
-# GitHub Actions only runs workflows from the REPOSITORY ROOT (.github/workflows),
-# not from the nested project directory. The DisasterMind project lives under
-# ``disastermind/``, so every job ``cd``s into it (or sets a working-directory)
-# before installing and testing.
+# The project lives at the repository root (``disastermind/`` is the Python
+# package, ``tests/`` the suite, ``clients/web/`` the frontend), so every job runs
+# from the root with no working-directory prefix.
 #
 # The runtime + test-suite are standard-library only (offline, no network, no
 # heavy optional deps), so CI installs the package with the dev extras and runs
@@ -17,8 +16,6 @@
 #                  type surface never blocks the pipeline; tighten over time).
 #   * security   — Trivy filesystem + image scan and a pip-audit of the dep tree.
 #   * sbom       — CycloneDX software bill-of-materials, uploaded as an artefact.
-# All extra jobs ``cd`` into disastermind/ (via the workflow-level working-directory
-# default, or an explicit ``cd`` for the container-scanning steps).
 name: ci
 
 on:
@@ -33,11 +30,6 @@ concurrency:
 
 permissions:
   contents: read
-
-defaults:
-  run:
-    # Every step runs from the nested project directory by default.
-    working-directory: disastermind
 
 jobs:
   test:
@@ -57,7 +49,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: disastermind/pyproject.toml
+          cache-dependency-path: pyproject.toml
 
       - name: Install (dev extras)
         run: |
@@ -66,7 +58,7 @@ jobs:
 
       - name: Run tests
         # The clients/ and tests/integration/ trees belong to other workstreams.
-        run: pytest -q --ignore=tests/integration --ignore=clients
+        run: python -m pytest -q --ignore=tests/integration --ignore=clients
 
   lint:
     name: lint (ruff)
@@ -80,7 +72,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: disastermind/pyproject.toml
+          cache-dependency-path: pyproject.toml
 
       - name: Install lint extras
         run: |
@@ -106,7 +98,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: disastermind/pyproject.toml
+          cache-dependency-path: pyproject.toml
 
       - name: Install lint extras
         run: |
@@ -135,7 +127,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: disastermind/pyproject.toml
+          cache-dependency-path: pyproject.toml
 
       - name: Install package + audit tool
         run: |
@@ -167,7 +159,7 @@ jobs:
         continue-on-error: true
         with:
           scan-type: fs
-          scan-ref: disastermind
+          scan-ref: .
           format: table
           ignore-unfixed: true
           severity: CRITICAL,HIGH
@@ -186,7 +178,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: disastermind/pyproject.toml
+          cache-dependency-path: pyproject.toml
 
       - name: Install package + CycloneDX
         run: |
@@ -202,7 +194,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sbom-cyclonedx
-          path: disastermind/sbom.cdx.json
+          path: sbom.cdx.json
           if-no-files-found: warn
 
   docker:
@@ -219,8 +211,8 @@ jobs:
       - name: Build image
         uses: docker/build-push-action@v6
         with:
-          context: disastermind
-          file: disastermind/Dockerfile
+          context: .
+          file: Dockerfile
           push: false
           load: true
           tags: disastermind:ci

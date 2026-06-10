@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+.venv/
+venv/
+
+# Frontend (clients/web — Vite + npm)
+node_modules/
+*.tsbuildinfo
+
+# OS
+.DS_Store
+
+# DisasterMind runtime artifacts
+audit.jsonl
+*.audit.jsonl
+dm_artifacts_*/
+
+# env / secrets
+.env
