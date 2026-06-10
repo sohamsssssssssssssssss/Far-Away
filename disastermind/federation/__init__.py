@@ -24,6 +24,7 @@ payload, so a request or offer can ride the same bus as everything else.
 """
 from __future__ import annotations
 
+from .coordinator import AidTicket, MutualAidCoordinator, spare_from_assets
 from .model import (
     AidDecision,
     AidOffer,
@@ -34,7 +35,6 @@ from .model import (
     request_from_message,
     request_to_message,
 )
-from .coordinator import AidTicket, MutualAidCoordinator, spare_from_assets
 
 __all__ = [
     "District",

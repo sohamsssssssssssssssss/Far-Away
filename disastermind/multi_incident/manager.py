@@ -13,8 +13,9 @@ Stdlib only, offline, deterministic.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 from ..audit.decision_log import DecisionLogger
 from ..core.bus import InMemoryBus
@@ -95,7 +96,7 @@ class IncidentSeed:
     def earthquake(
         cls, lat: float = 20.30, lon: float = 85.84, *, magnitude: float = 6.2,
         depth_km: float = 12.0, **meta: Any,
-    ) -> "IncidentSeed":
+    ) -> IncidentSeed:
         m = {"magnitude": magnitude, "depth_km": depth_km, **meta}
         return cls(
             module=Module.EARTHQUAKE, lat=lat, lon=lon, severity=magnitude, meta=m,
@@ -106,7 +107,7 @@ class IncidentSeed:
     def flood(
         cls, lat: float = 20.30, lon: float = 85.84, *, river_level_m: float = 6.5,
         rainfall_mm: float = 180.0, population: int = 1500, **meta: Any,
-    ) -> "IncidentSeed":
+    ) -> IncidentSeed:
         m = {"river_level_m": river_level_m, "rainfall_mm": rainfall_mm,
              "warning_colour": "red", **meta}
         return cls(
@@ -119,7 +120,7 @@ class IncidentSeed:
     def urban_fire(
         cls, lat: float = 20.30, lon: float = 85.84, *, brightness_k: float = 364.5,
         wind_speed_ms: float = 16.0, **meta: Any,
-    ) -> "IncidentSeed":
+    ) -> IncidentSeed:
         m = {"brightness_k": brightness_k, "wind_speed_ms": wind_speed_ms,
              "wind_dir_deg": 245.0, **meta}
         return cls(

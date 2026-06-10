@@ -32,9 +32,8 @@ imports and tests run with stdlib only.
 """
 from __future__ import annotations
 
-import math
 import random
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from ...audit.decision_log import DecisionLogger

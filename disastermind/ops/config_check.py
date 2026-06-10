@@ -18,13 +18,14 @@ deterministic, and side-effect free — well-formedness of a DSN is checked by
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Iterable
+from enum import StrEnum
+from typing import Any
 from urllib.parse import urlsplit
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     ERROR = "error"
     WARNING = "warning"
 

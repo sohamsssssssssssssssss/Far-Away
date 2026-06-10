@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from typing import Callable
+from collections.abc import Callable
 
 from ..audit.decision_log import DecisionLogger
 from ..core.agent import BaseAgent
@@ -214,9 +214,8 @@ class MetricsCollector(BaseAgent):
 
         # Count real dispatch ORDERS only — skip the router's ACK receipts so the
         # dispatch tally tracks decisions executed, not housekeeping chatter.
-        if message.topic == Topic.DISPATCH:
-            if message.type is not MessageType.ACK and payload.get("kind") != "dispatch_ack":
-                self.dispatches += 1
+        if message.topic == Topic.DISPATCH and message.type is not MessageType.ACK and payload.get("kind") != "dispatch_ack":
+            self.dispatches += 1
 
         # Error/failure counter: a message is "in error" if it carries an
         # explicit failure marker (a truthy ``error``/``failed`` payload flag, a

@@ -36,7 +36,7 @@ class DecisionLogger:
 
     # ---------------------------------------------------------------- factory
     @classmethod
-    def null(cls) -> "DecisionLogger":
+    def null(cls) -> DecisionLogger:
         """A logger that records to an in-memory list only (tests/degraded)."""
         inst = cls.__new__(cls)
         inst.path = ""
@@ -52,7 +52,7 @@ class DecisionLogger:
             return GENESIS
         tip = GENESIS
         try:
-            with open(self.path, "r", encoding="utf-8") as fh:
+            with open(self.path, encoding="utf-8") as fh:
                 for line in fh:
                     line = line.strip()
                     if line:
@@ -124,7 +124,7 @@ class DecisionLogger:
         if not self.path or not os.path.exists(self.path):
             return True
         prev = GENESIS
-        with open(self.path, "r", encoding="utf-8") as fh:
+        with open(self.path, encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
                 if not line:

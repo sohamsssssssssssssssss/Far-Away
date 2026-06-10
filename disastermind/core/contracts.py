@@ -7,9 +7,9 @@ PRD Group A, Step 9 (Decision Logging) and is imported by every tier.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
-from enum import Enum, IntEnum
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
+from enum import IntEnum, StrEnum
 from typing import Any
 
 
@@ -21,7 +21,7 @@ class Tier(IntEnum):
     EDGE = 3  # ingestion / dispatch — NO decision authority
 
 
-class Module(str, Enum):
+class Module(StrEnum):
     """Disaster domain a message/agent belongs to."""
 
     CYCLONE_FLOOD = "A"
@@ -40,7 +40,7 @@ class Priority(IntEnum):
     INFO = 5
 
 
-class MessageType(str, Enum):
+class MessageType(StrEnum):
     """PRD Step 9 message taxonomy."""
 
     ALERT = "alert"
@@ -50,7 +50,7 @@ class MessageType(str, Enum):
     ESCALATION = "escalation"
 
 
-class EscalationTrigger(str, Enum):
+class EscalationTrigger(StrEnum):
     """PRD Step 7 — decisions that require human approval."""
 
     CROSS_STATE_RESOURCE = "cross_state_resource_request"
@@ -78,7 +78,7 @@ HUMAN_ONLY_TRIGGERS: frozenset[EscalationTrigger] = frozenset(
 
 def utcnow_iso() -> str:
     """ISO 8601 timestamp in UTC (PRD Step 9 requirement)."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 @dataclass
@@ -119,7 +119,7 @@ class Message:
         type: MessageType = MessageType.ACK,
         payload: dict[str, Any] | None = None,
         reasoning: list[str] | None = None,
-    ) -> "Message":
+    ) -> Message:
         """Build a correlated reply addressed back to this message's sender."""
         return Message(
             sender=sender,

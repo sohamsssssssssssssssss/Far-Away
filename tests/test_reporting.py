@@ -20,7 +20,6 @@ from disastermind.core.config import Settings
 from disastermind.core.contracts import (
     EscalationTrigger,
     Module,
-    Topic,
 )
 from disastermind.reporting import (
     EscalationOutcome,
@@ -113,8 +112,8 @@ def test_report_captures_escalation_pending() -> None:
 
 def _commander_with_escalation():
     """Build a lone Commander holding one open cross-state escalation."""
-    from disastermind.tier1.commander.agent import CommanderAgent
     from disastermind.scenarios.base import inject_escalation_order
+    from disastermind.tier1.commander.agent import CommanderAgent
 
     bus = InMemoryBus()
     logger = DecisionLogger.null()

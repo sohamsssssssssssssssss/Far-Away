@@ -33,7 +33,8 @@ ingress before its schema is registered here.
 """
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 # We reference the frozen Topic constants for the canonical names but ALSO accept
 # the short logical name (the part after the tier prefix) so callers do not have

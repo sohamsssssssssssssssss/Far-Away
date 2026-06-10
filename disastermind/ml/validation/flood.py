@@ -143,7 +143,7 @@ def load_rows(path: str = FIXTURE) -> list[FloodRow]:
 
         # --- train-years climatology (threshold + day-of-year flood frequency)
         train_q = sorted(
-            q for q, d in zip(discharge, dates) if q is not None and d.year < SPLIT_YEAR
+            q for q, d in zip(discharge, dates, strict=False) if q is not None and d.year < SPLIT_YEAR
         )
         if len(train_q) < 365:
             continue  # site unusable; skip whole site visibly (row count drops)

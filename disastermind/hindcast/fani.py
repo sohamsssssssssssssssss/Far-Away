@@ -47,7 +47,7 @@ class FaniCase:
 
 def load_case(path: str) -> FaniCase:
     """Load any committed storm fixture (Fani, Amphan, ...) into a case."""
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         raw = json.load(fh)
     track = [
         TrackPoint(

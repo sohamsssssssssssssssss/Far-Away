@@ -34,8 +34,9 @@ import abc
 import logging
 import os
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 from xml.sax.saxutils import escape
 
 from ...core.config import Settings

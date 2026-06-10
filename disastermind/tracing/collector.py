@@ -57,9 +57,7 @@ def _is_real_dispatch(message: Message) -> bool:
         return False
     if message.type is MessageType.ACK:
         return False
-    if (message.payload or {}).get("kind") == "dispatch_ack":
-        return False
-    return True
+    return (message.payload or {}).get("kind") != "dispatch_ack"
 
 
 @dataclass

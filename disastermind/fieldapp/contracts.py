@@ -56,7 +56,7 @@ class DeploymentOrderMsg:
     @classmethod
     def from_payload(
         cls, order: dict[str, Any], incident_id: str | None = None
-    ) -> "DeploymentOrderMsg":
+    ) -> DeploymentOrderMsg:
         """Project a raw dispatch/field-order dict onto the device contract.
 
         Accepts the order dict embedded in a ``Topic.DISPATCH`` payload

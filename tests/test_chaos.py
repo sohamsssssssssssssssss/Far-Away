@@ -29,9 +29,9 @@ import pytest
 from disastermind.audit.decision_log import DecisionLogger
 from disastermind.core.bus import InMemoryBus, KafkaBus
 from disastermind.core.config import Settings
-from disastermind.core.contracts import Message, MessageType, Module, Priority, Topic
-from disastermind.orchestration.build import build_system
+from disastermind.core.contracts import Message, MessageType, Priority, Topic
 from disastermind.ops import GracefulShutdown, ReadinessAggregator, readiness
+from disastermind.orchestration.build import build_system
 from disastermind.resilience import (
     BROKEN_MODULE_PATH,
     FailingAgent,
@@ -40,7 +40,6 @@ from disastermind.resilience import (
     drive_to_dispatch,
     inject_failing_agent,
     last_known_orders,
-    seed_field_teams,
 )
 
 

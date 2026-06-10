@@ -26,7 +26,6 @@ This module is OPTIONAL and never auto-wired into ``build_system`` (see
 """
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
 from ..audit.decision_log import DecisionLogger

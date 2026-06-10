@@ -24,8 +24,9 @@ from __future__ import annotations
 
 import logging
 import signal
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable
+from typing import Any
 
 log = logging.getLogger("disastermind.ops.shutdown")
 

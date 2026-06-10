@@ -138,11 +138,11 @@ class DashboardServer:
         """
         try:
             from ..security.auth import (
-                authenticate,
                 ROLE_ADMIN,
                 ROLE_OPERATOR,
                 ROLE_VIEWER,
                 TokenStore,
+                authenticate,
             )
             from ..security.ratelimit import RateLimiter, client_ip, ip_rate_limiter
         except Exception:
@@ -173,7 +173,7 @@ class DashboardServer:
                 return ROLE_ADMIN
             if method in ("GET", "HEAD", "OPTIONS"):
                 return ROLE_VIEWER
-            if p.endswith("/approve") or p.endswith("/reject"):
+            if p.endswith(("/approve", "/reject")):
                 return ROLE_OPERATOR
             # Any other mutating route defaults to operator (read+act tier).
             return ROLE_OPERATOR

@@ -38,6 +38,7 @@ import math
 from dataclasses import asdict
 from typing import Any
 
+from ...audit.decision_log import DecisionLogger
 from ...core.agent import BaseAgent
 from ...core.bus import MessageBus
 from ...core.contracts import (
@@ -48,7 +49,6 @@ from ...core.contracts import (
     Tier,
     Topic,
 )
-from ...audit.decision_log import DecisionLogger
 from ...models.domain import (
     BuildingImpact,
     EventKind,
@@ -608,7 +608,7 @@ class EarthquakeImpactAgent(_PredictionAgent):
             shap_accum["magnitude"] += min(1.0, magnitude / 9.0) * collapse
             shap_accum["distance_km"] += (1.0 / (1.0 + dist_km)) * collapse
             shap_accum["construction"] += frag["slope"] * collapse
-            n += 1
+            n += 1  # noqa: SIM113
 
             cell = GridCell.from_latlon(loc, size_m=100, origin=epicentre)
             z = zone_acc.setdefault(

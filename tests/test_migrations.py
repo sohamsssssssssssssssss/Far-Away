@@ -33,7 +33,7 @@ from disastermind.migrations import migrations as migrations_mod
 
 # --------------------------------------------------------------- fake DB-API conn
 class _FakeCursor:
-    def __init__(self, conn: "_FakeConn") -> None:
+    def __init__(self, conn: _FakeConn) -> None:
         self._conn = conn
         self._rows: list[tuple] = []
 

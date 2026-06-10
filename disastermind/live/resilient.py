@@ -39,7 +39,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from .ingest import _agents_of, _build_raw_feed_message, is_feed_agent, poll_feeds
 
@@ -144,13 +145,13 @@ def _new_breaker(clock: Callable[[], float] | None) -> Any | None:
         from ..ops import CircuitBreaker
     except Exception:  # pragma: no cover - ops is part of the package
         return None
-    kwargs: dict[str, Any] = dict(
-        failure_threshold=DEFAULT_FAILURE_THRESHOLD,
-        reset_timeout=DEFAULT_RESET_TIMEOUT,
+    kwargs: dict[str, Any] = {
+        "failure_threshold": DEFAULT_FAILURE_THRESHOLD,
+        "reset_timeout": DEFAULT_RESET_TIMEOUT,
         # Only a real live failure should trip the breaker — not, say, a
         # downstream emit error.
-        exceptions=_LiveFetchError,
-    )
+        "exceptions": _LiveFetchError,
+    }
     if clock is not None:
         kwargs["clock"] = clock
     return CircuitBreaker(**kwargs)

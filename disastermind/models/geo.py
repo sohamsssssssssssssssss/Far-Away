@@ -17,7 +17,7 @@ class LatLon:
     lat: float
     lon: float
 
-    def distance_m(self, other: "LatLon") -> float:
+    def distance_m(self, other: LatLon) -> float:
         """Great-circle distance in metres (haversine)."""
         p1, p2 = math.radians(self.lat), math.radians(other.lat)
         dphi = math.radians(other.lat - self.lat)
@@ -53,7 +53,7 @@ class GridCell:
         return f"{self.size_m}m:{self.row}:{self.col}"
 
     @staticmethod
-    def from_latlon(p: LatLon, size_m: int = 100, origin: LatLon | None = None) -> "GridCell":
+    def from_latlon(p: LatLon, size_m: int = 100, origin: LatLon | None = None) -> GridCell:
         origin = origin or LatLon(0.0, 0.0)
         # local equirectangular approximation — adequate at city/district scale
         m_per_deg_lat = 111_320.0

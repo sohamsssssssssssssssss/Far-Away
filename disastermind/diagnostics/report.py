@@ -19,11 +19,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class Status(str, Enum):
+class Status(StrEnum):
     OK = "ok"
     WARN = "warn"
     FAIL = "fail"

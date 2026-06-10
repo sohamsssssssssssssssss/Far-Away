@@ -126,7 +126,7 @@ def test_audit_chain_verifies_then_breaks_on_tamper(disk_harness):
     assert logger.verify_chain() is True, "untampered audit chain failed to verify"
 
     # Tamper: rewrite the body of a middle record on disk, leaving its hash.
-    with open(logger.path, "r", encoding="utf-8") as fh:
+    with open(logger.path, encoding="utf-8") as fh:
         lines = [ln for ln in fh if ln.strip()]
     assert len(lines) >= 2
 

@@ -40,10 +40,10 @@ import logging
 from dataclasses import asdict
 from typing import Any
 
+from ...audit.decision_log import DecisionLogger
 from ...core.agent import BaseAgent
 from ...core.bus import MessageBus
 from ...core.contracts import Message, MessageType, Module, Priority, Tier, Topic
-from ...audit.decision_log import DecisionLogger
 from ...models.domain import (
     CascadeFailure,
     EvacRoute,
@@ -344,8 +344,8 @@ class EvacuationRoutingAgent(BaseAgent):
             total_pop += int(z.get("population", 0) or 0)
         if not locs:
             return None
-        mean_lat = sum(l.lat for l in locs) / len(locs)
-        mean_lon = sum(l.lon for l in locs) / len(locs)
+        mean_lat = sum(loc.lat for loc in locs) / len(locs)
+        mean_lon = sum(loc.lon for loc in locs) / len(locs)
         # Cap generously; never below a usable minimum.
         capacity = max(DEFAULT_VEHICLE_CAPACITY, total_pop * 2 or DEFAULT_VEHICLE_CAPACITY)
         return Shelter(

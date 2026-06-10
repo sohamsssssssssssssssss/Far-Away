@@ -127,7 +127,7 @@ def test_client_acks_dispatch_and_emits_gps_update():
     ]
     assert beacons, "client emitted no gps_beacon on dispatch"
     reading = beacons[-1].payload["readings"][0]
-    assert set(("team_id", "asset_type", "location", "status")) <= set(reading)
+    assert {"team_id", "asset_type", "location", "status"} <= set(reading)
     assert reading["team_id"] == "NDRF-01"
     assert reading["asset_type"] == "ndrf_team"
     assert reading["status"] == "enroute"  # idle -> enroute on first order
@@ -217,7 +217,7 @@ def test_over_capacity_report_triggers_resource_request():
     from disastermind.tier2.field.agent import FieldCoordinationAgent
 
     bus = InMemoryBus()
-    coord = FieldCoordinationAgent(bus=bus)
+    FieldCoordinationAgent(bus=bus)
     client = MockFieldClient(
         team_id="MED-01", bus=bus, asset_type=AssetType.MEDICAL_UNIT,
         location=LatLon(20.29, 85.83),

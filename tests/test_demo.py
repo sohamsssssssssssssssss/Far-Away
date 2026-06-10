@@ -98,7 +98,7 @@ def test_transcript_is_dict_like_and_jsonable():
     # dict-like access
     assert "tally" in t
     assert t.get("missing", "x") == "x"
-    assert set(["module", "tally", "report", "brief"]).issubset(set(t.keys()))
+    assert {"module", "tally", "report", "brief"}.issubset(set(t.keys()))
     # JSON-able
     blob = json.dumps(t.to_dict())
     assert json.loads(blob)["module"] == "B"

@@ -30,9 +30,10 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from ..core.config import Settings
 from ..integrations import sql as _sql
@@ -166,16 +167,14 @@ def _is_configured_dsn(dsn: str | None) -> bool:
     if not dsn or not dsn.strip():
         return False
     text = dsn.strip()
-    if not (text.startswith("postgres://") or text.startswith("postgresql://")):
+    if not (text.startswith(("postgres://", "postgresql://"))):
         return False
     # The literal localhost defaults from core.config.Settings are placeholders.
     placeholders = {
         "postgresql://localhost/disastermind",
         "postgresql://localhost/dm_telemetry",
     }
-    if text in placeholders:
-        return False
-    return True
+    return text not in placeholders
 
 
 def can_apply(settings: Settings | None = None) -> bool:
@@ -246,7 +245,7 @@ def pending_migrations(
 
 def _record_applied(conn, version: str, *, now: datetime | None = None) -> None:  # pragma: no cover - live path
     """Insert a ledger row marking ``version`` as applied (idempotent)."""
-    ts = (now or datetime.now(timezone.utc)).isoformat()
+    ts = (now or datetime.now(UTC)).isoformat()
     with conn.cursor() as cur:
         cur.execute(
             f"INSERT INTO {SCHEMA_MIGRATIONS_TABLE} (version, applied_at) "

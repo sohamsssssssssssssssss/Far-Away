@@ -104,7 +104,7 @@ def cross_check_flood(
     }
     # severity gradient: mean risk by GDACS class of the day
     buckets: dict[str, list[float]] = {"red": [], "orange": [], "quiet": []}
-    for d, r in zip(dates, risks):
+    for d, r in zip(dates, risks, strict=False):
         rank = event_days.get(d)
         key = "red" if rank == 2 else "orange" if rank == 1 else "quiet"
         buckets[key].append(r)

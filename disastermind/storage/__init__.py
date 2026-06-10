@@ -41,7 +41,7 @@ class Storage:
     artifacts: MinioArtifactStore
 
     @classmethod
-    def in_memory(cls) -> "Storage":
+    def in_memory(cls) -> Storage:
         """All repos in fallback mode — zero external services (default for tests)."""
         return cls(
             resources=PostgisResourceRepo(),
@@ -51,7 +51,7 @@ class Storage:
         )
 
     @classmethod
-    def from_settings(cls, settings=None, *, live: bool = False) -> "Storage":
+    def from_settings(cls, settings=None, *, live: bool = False) -> Storage:
         """Build from :class:`~disastermind.core.config.Settings`.
 
         ``live=False`` (default) yields the in-memory fallback so nothing connects.

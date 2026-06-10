@@ -100,7 +100,7 @@ def test_spans_nest_and_form_a_tree_under_injected_clock():
     assert rec.children_of(outer.span_id) == [inner]
     assert rec.children_of(inner.span_id) == []
     # by_incident correlates both spans to the same incident.
-    assert set(s.span_id for s in rec.by_incident("EQ-1")) == {
+    assert {s.span_id for s in rec.by_incident("EQ-1")} == {
         outer.span_id,
         inner.span_id,
     }
@@ -251,7 +251,7 @@ def test_collector_correlates_and_measures_logical_latency():
 def test_collector_tallies_a_driven_earthquake_scenario():
     """Wire the collector onto a scenario's bus, then drive the real pipeline."""
     from disastermind.scenarios.base import build_loop
-    from disastermind.scenarios.earthquake import simulate_earthquake, INCIDENT_ID
+    from disastermind.scenarios.earthquake import INCIDENT_ID, simulate_earthquake
 
     loop = build_loop()
     collector = TraceCollector(loop.bus, DecisionLogger.null())

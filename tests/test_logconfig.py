@@ -14,7 +14,7 @@ from disastermind.logconfig import (
     configure_logging,
     get_logger,
 )
-from disastermind.logconfig.core import ROOT_LOGGER_NAME, _HANDLER_TAG
+from disastermind.logconfig.core import _HANDLER_TAG, ROOT_LOGGER_NAME
 
 
 @pytest.fixture()

@@ -49,7 +49,6 @@ def test_start_honours_max_cycles_and_never_really_sleeps():
     runner = _runner()
 
     slept: list[float] = []
-    ticks: list[float] = []
     clock_value = {"t": 0.0}
 
     def fake_clock() -> float:

@@ -94,7 +94,7 @@ def heuristic_probability(module: Module, values: Sequence[float]) -> float:
     if p is None:
         raise ValueError(f"no heuristic for module {module!r}")
     z = p.intercept
-    for w, s, v in zip(p.weights, p.scales, values):
+    for w, s, v in zip(p.weights, p.scales, values, strict=False):
         z += w * (float(v) / (s or 1.0))
     return _clamp01(_logistic(z))
 

@@ -41,7 +41,7 @@ def test_elevation_aware_fix_is_better_grounded():
 
 
 def test_risk_functions_behave_physically():
-    cells = load_dem()
+    load_dem()
     # at equal surge proximity, the elevation-aware risk prefers the lower cell
     low = {"lat": 19.8, "lon": 85.83, "elev_m": 0.0}
     high = {"lat": 19.8, "lon": 85.83, "elev_m": 40.0}

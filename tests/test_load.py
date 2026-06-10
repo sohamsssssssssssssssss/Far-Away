@@ -23,19 +23,19 @@ import pytest
 from disastermind.audit.decision_log import DecisionLogger
 from disastermind.core.bus import InMemoryBus
 from disastermind.core.config import Settings
-from disastermind.core.contracts import Message, MessageType, Module, Priority, Topic
-from disastermind.orchestration.build import build_system
+from disastermind.core.contracts import Message, Module, Priority, Topic
 from disastermind.ops import LatencyBudget, Timer
+from disastermind.orchestration.build import build_system
+from disastermind.scenarios import (
+    simulate_cyclone_flood,
+    simulate_earthquake,
+    simulate_urban_fire,
+)
 from disastermind.scenarios.base import (
     inject_raw_event,
     real_dispatches,
     seed_field_teams,
     topic_counts,
-)
-from disastermind.scenarios import (
-    simulate_cyclone_flood,
-    simulate_earthquake,
-    simulate_urban_fire,
 )
 
 
@@ -147,7 +147,7 @@ def test_bus_history_stays_bounded_under_sustained_load() -> None:
     """
     cap = 64
     bus = InMemoryBus(history=cap)
-    loop = build_system(bus=bus, logger=DecisionLogger.null(), settings=Settings())
+    build_system(bus=bus, logger=DecisionLogger.null(), settings=Settings())
     seed_field_teams(bus)
 
     produced = 0

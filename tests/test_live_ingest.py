@@ -16,7 +16,6 @@ stays green — this file only adds behaviour and never touches that path.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from disastermind.audit.decision_log import DecisionLogger

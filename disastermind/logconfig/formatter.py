@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 # Attributes present on a vanilla LogRecord. Anything *not* in this set was
@@ -87,7 +87,7 @@ class JsonFormatter(logging.Formatter):
     def _timestamp(self, record: logging.LogRecord) -> str:
         # Use the record's own creation time (not "now") so the timestamp
         # reflects when the event happened. UTC with offset for unambiguity.
-        dt = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        dt = datetime.fromtimestamp(record.created, tz=UTC)
         return dt.isoformat()
 
     def format(self, record: logging.LogRecord) -> str:  # noqa: A003 - stdlib API

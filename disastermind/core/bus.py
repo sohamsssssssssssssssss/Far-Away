@@ -16,7 +16,7 @@ from __future__ import annotations
 import abc
 import logging
 from collections import defaultdict
-from typing import Callable
+from collections.abc import Callable
 
 from .contracts import Message
 
@@ -32,6 +32,7 @@ class MessageBus(abc.ABC):
     @abc.abstractmethod
     def subscribe(self, topic: str, subscriber: str, callback: Callback) -> None: ...
 
+    @abc.abstractmethod
     def close(self) -> None:  # pragma: no cover - optional override
         pass
 

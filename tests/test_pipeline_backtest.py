@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 
+from disastermind.hindcast.fani import load_fani
 from disastermind.hindcast.pipeline_backtest import (
     ORDER_BY_DEADLINE,
     approach_trajectory,
@@ -17,7 +18,6 @@ from disastermind.hindcast.pipeline_backtest import (
     to_markdown,
     validated_far_by_lead,
 )
-from disastermind.hindcast.fani import load_fani
 
 NOT_CLEARABLE = "NOT_CLEARABLE_VERTICAL"
 

@@ -31,7 +31,7 @@ def to_markdown(case: FaniCase, results: list[HindcastResult]) -> str:
         err = "n/a" if r.track_error_km != r.track_error_km else f"{r.track_error_km:.0f} km"
         lines.append(
             f"| {r.lead_hours:.0f} h | {r.cutoff_time} | "
-            f"{('%.0f kt' % r.cutoff_intensity_kt) if r.cutoff_intensity_kt else '—'} | "
+            f"{(f'{r.cutoff_intensity_kt:.0f} kt') if r.cutoff_intensity_kt else '—'} | "
             f"{err} | {'✅' if r.activated else '❌'} | "
             f"{'✅' if r.produced_plan else '❌'} | {r.dispatches} |"
         )

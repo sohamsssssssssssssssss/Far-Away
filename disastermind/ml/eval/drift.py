@@ -60,7 +60,7 @@ def psi(reference: Sequence[float], live: Sequence[float], *, n_bins: int = 10) 
 
     p_ref = _proportions(ref)
     p_live = _proportions([float(v) for v in live])
-    return sum((pl - pr) * math.log(pl / pr) for pr, pl in zip(p_ref, p_live))
+    return sum((pl - pr) * math.log(pl / pr) for pr, pl in zip(p_ref, p_live, strict=False))
 
 
 def ks_statistic(a: Sequence[float], b: Sequence[float]) -> tuple[float, float]:

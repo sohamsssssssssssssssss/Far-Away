@@ -27,6 +27,7 @@ from __future__ import annotations
 import math
 import uuid
 from dataclasses import asdict
+from datetime import UTC
 from typing import Any
 
 from ...core.agent import BaseAgent
@@ -140,10 +141,8 @@ class FieldCoordinationAgent(BaseAgent):
         kind = str(payload.get("kind", ""))
         readings = payload.get("readings") or []
         # Only GPS-beacon telemetry concerns field teams; ignore weather/water etc.
-        if kind not in ("gps", "gps_beacon", "beacon", "team_gps", "ais"):
-            # Some IoT producers omit kind; accept readings that look like beacons.
-            if not any(isinstance(r, dict) and "team_id" in r for r in readings):
-                return []
+        if kind not in ("gps", "gps_beacon", "beacon", "team_gps", "ais") and not any(isinstance(r, dict) and "team_id" in r for r in readings):
+            return []
 
         now = _parse_iso_seconds(message.timestamp) or 0.0
         out: list[Message] = []
@@ -651,9 +650,9 @@ class FieldCoordinationAgent(BaseAgent):
         older than ``STALL_SECONDS`` while still en route is flagged even if no
         new telemetry arrived (silent-radio / lost-beacon case).
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        now = datetime.now(timezone.utc).timestamp()
+        now = datetime.now(UTC).timestamp()
         out: list[Message] = []
         for team_id, order in list(self._active_orders.items()):
             team = self.teams.get(team_id)

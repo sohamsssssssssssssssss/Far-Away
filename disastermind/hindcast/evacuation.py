@@ -76,7 +76,7 @@ def build_graph(fixture: dict) -> RoadGraph:
 
 
 def load_puri_osm(path: str = FIXTURE) -> dict:
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
 

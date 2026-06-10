@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Callable
+from collections.abc import Callable
 
 from ..core.bus import KafkaBus, MessageBus
 from ..core.contracts import Message

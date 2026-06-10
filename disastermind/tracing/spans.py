@@ -36,8 +36,9 @@ import logging
 import os
 import threading
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 log = logging.getLogger("disastermind.tracing.spans")
 
@@ -70,12 +71,12 @@ class Span:
     status: str = "ok"
 
     # ----------------------------------------------------------- mutation API
-    def set(self, key: str, value: Any) -> "Span":
+    def set(self, key: str, value: Any) -> Span:
         """Attach/overwrite one attribute; returns self for chaining."""
         self.attributes[key] = value
         return self
 
-    def update(self, **attrs: Any) -> "Span":
+    def update(self, **attrs: Any) -> Span:
         """Attach several attributes at once."""
         self.attributes.update(attrs)
         return self

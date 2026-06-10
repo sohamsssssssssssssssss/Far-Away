@@ -27,8 +27,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ...core.contracts import (
-    EscalationTrigger,
     HUMAN_ONLY_TRIGGERS,
+    EscalationTrigger,
     Priority,
 )
 

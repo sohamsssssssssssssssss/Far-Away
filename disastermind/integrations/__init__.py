@@ -41,14 +41,14 @@ from .kafka import (
     message_to_frame,
 )
 from .sql import (
-    ASSETS_TABLE,
     ASSET_COLUMNS,
+    ASSETS_TABLE,
     SRID,
-    TELEMETRY_TABLE,
     TELEMETRY_COLUMNS,
-    ZONES_TABLE,
+    TELEMETRY_TABLE,
     ZONE_SCALAR_COLUMNS,
     ZONE_VULN_COLUMNS,
+    ZONES_TABLE,
     all_assets_sql,
     all_zones_sql,
     create_assets_table_ddl,

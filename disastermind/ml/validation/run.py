@@ -251,8 +251,8 @@ def evaluate_hazard(
     """
     # --- calibration split (deterministic stride; all strictly pre-test rows)
     cal_idx = set(range(0, len(spec.ytr), 5))
-    fit_rows = [(x, y) for i, (x, y) in enumerate(zip(spec.Xtr, spec.ytr)) if i not in cal_idx]
-    cal_rows = [(x, y) for i, (x, y) in enumerate(zip(spec.Xtr, spec.ytr)) if i in cal_idx]
+    fit_rows = [(x, y) for i, (x, y) in enumerate(zip(spec.Xtr, spec.ytr, strict=False)) if i not in cal_idx]
+    cal_rows = [(x, y) for i, (x, y) in enumerate(zip(spec.Xtr, spec.ytr, strict=False)) if i in cal_idx]
     fit_rows = _cap(fit_rows, fit_cap)
     X_fit, y_fit = [r[0] for r in fit_rows], [r[1] for r in fit_rows]
     X_cal, y_cal = [r[0] for r in cal_rows], [r[1] for r in cal_rows]
@@ -345,7 +345,7 @@ def evaluate_hazard(
     def factory(
         Xf: list[list[float]], yf: list[int]
     ) -> Callable[[list[list[float]]], list[float]]:
-        rows = _cap(list(zip(Xf, yf)), cv_cap)
+        rows = _cap(list(zip(Xf, yf, strict=False)), cv_cap)
         m = fit_logistic(
             [r[0] for r in rows], [r[1] for r in rows], name="cv", epochs=cv_epochs,
             balanced=True,
@@ -379,7 +379,7 @@ def evaluate_hazard(
         from . import external as external_mod
 
         risk_by_date: dict = collections.defaultdict(float)
-        for d, p in zip(spec.dates_test, p_te):
+        for d, p in zip(spec.dates_test, p_te, strict=False):
             risk_by_date[d] = max(risk_by_date[d], p)
         ext_dates = sorted(risk_by_date)
         try:
@@ -392,7 +392,7 @@ def evaluate_hazard(
     # --- lead-time-vs-POD curve (hazards with a forecast horizon only)
     leadtime = None
     if spec.lead_hours and spec.horizon_labels_train and spec.horizon_labels_test:
-        lt_rows = _cap(list(zip(spec.Xtr, spec.horizon_labels_train)), fit_cap)
+        lt_rows = _cap(list(zip(spec.Xtr, spec.horizon_labels_train, strict=False)), fit_cap)
         leadtime = leadtime_to_dict(
             lead_time_curve(
                 [r[0] for r in lt_rows],
@@ -416,7 +416,7 @@ def evaluate_hazard(
         "test_base_rate": round(sum(spec.yte) / max(1, len(spec.yte)), 4),
         "model": _metrics(spec.yte, p_te),
         "model_raw": _metrics(spec.yte, p_te_raw),
-        "model_weights": {n: round(w, 3) for n, w in zip(spec.feature_names, model.weights)},
+        "model_weights": {n: round(w, 3) for n, w in zip(spec.feature_names, model.weights, strict=False)},
         "baseline_comparisons": comparisons,
         "decision": decision,
         "calibration": calibration,
@@ -507,7 +507,7 @@ def quake_felt_vs_pager(
     train, test = temporal_split(quakes)
     Xtr, ytr = [q.features() for q in train], [q.label_felt() for q in train]
     Xte, yte = [q.features() for q in test], [q.label_felt() for q in test]
-    rows = _cap(list(zip(Xtr, ytr)), 12000)
+    rows = _cap(list(zip(Xtr, ytr, strict=False)), 12000)
     model = fit_logistic(
         [r[0] for r in rows], [r[1] for r in rows], name="felt", epochs=150, balanced=True
     )

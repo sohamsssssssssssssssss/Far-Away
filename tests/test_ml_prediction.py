@@ -238,7 +238,7 @@ def test_fire_default_path_is_heuristic_unchanged():
 
 def test_fire_trained_model_expands_perimeter_and_model_tag():
     """A high-confidence trained model accelerates the projected perimeter."""
-    feed_kwargs = dict(severity=1.5, meta={"wind_speed_ms": 4.0, "wind_dir_deg": 90.0})
+    feed_kwargs = {"severity": 1.5, "meta": {"wind_speed_ms": 4.0, "wind_dir_deg": 90.0}}
     baseline_logger = DecisionLogger.null()
     baseline_radius = _max_perimeter_radius(
         FireSpreadAgent(InMemoryBus(), baseline_logger).handle(

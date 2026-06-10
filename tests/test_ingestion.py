@@ -12,8 +12,8 @@ from disastermind.audit.decision_log import DecisionLogger
 from disastermind.core.bus import InMemoryBus
 from disastermind.core.config import Settings
 from disastermind.core.contracts import MessageType, Module, Priority, Topic
-from disastermind.tier3.ingestion.seismic import USGSFeedAgent
 from disastermind.tier3.ingestion.hydromet import CWCFeedAgent
+from disastermind.tier3.ingestion.seismic import USGSFeedAgent
 
 
 def _agent(cls):

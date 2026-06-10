@@ -9,17 +9,18 @@ state is used anywhere in this module.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from collections import Counter
-from typing import Any, Callable
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any
 
-from ..core.contracts import Module, Topic
-from ..orchestration.triggers import Signals, should_activate
 from .. import scenarios as _scenarios
-from ..reporting import IncidentReporter
+from ..core.contracts import Module, Topic
 from ..llm import DecisionSupportAdvisor, TemplateClient
 from ..models.domain import DisasterEvent, EventKind
 from ..models.geo import LatLon
+from ..orchestration.triggers import Signals, should_activate
+from ..reporting import IncidentReporter
 
 # --------------------------------------------------------------------------- config
 # Per-module wiring: the scenario generator to drive, its module enum, the stable

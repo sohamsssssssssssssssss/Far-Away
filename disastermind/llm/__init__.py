@@ -8,17 +8,17 @@ no network access (PRD Step 10 graceful degradation).
 """
 from __future__ import annotations
 
-from .client import (
-    AnthropicClient,
-    LLMClient,
-    TemplateClient,
-    make_client,
-)
 from .advisor import (
     DecisionSupportAdvisor,
     PublicAlert,
     ReallocationAdvice,
     ReallocationMove,
+)
+from .client import (
+    AnthropicClient,
+    LLMClient,
+    TemplateClient,
+    make_client,
 )
 from .narrator import ESCALATION_NARRATIVE, EscalationNarrator
 

@@ -32,7 +32,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from typing import Sequence
+from collections.abc import Sequence
 
 from .audit.decision_log import DecisionLogger
 from .core.config import Settings
@@ -281,7 +281,7 @@ def _print_topic_counts(counts: dict[str, int], out) -> None:
 def _count_records(path: str) -> int:
     n = 0
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             for line in fh:
                 if line.strip():
                     n += 1

@@ -1,0 +1,201 @@
+2026-06-08 01:25:47 | WARNING  | Cannot detect or read from CBR archives
+2026-06-08 01:25:47 | INFO     | Starting Codex v1.10.8
+2026-06-08 01:25:47 | INFO     | Ensuring database is correct and up to date...
+2026-06-08 01:25:51 | SUCCESS  | Database ready.
+2026-06-08 01:25:51 | SUCCESS  | Created admin user.
+2026-06-08 01:25:51 | INFO     | Created AdminFlag: Auto Update = False
+2026-06-08 01:25:51 | INFO     | Created AdminFlag: Banner Text = True
+2026-06-08 01:25:51 | INFO     | Created AdminFlag: Folder View = True
+2026-06-08 01:25:51 | INFO     | Created AdminFlag: Import Metadata = True
+2026-06-08 01:25:51 | INFO     | Created AdminFlag: Lazy Import Metadata = True
+2026-06-08 01:25:51 | INFO     | Created AdminFlag: Non Users = True
+2026-06-08 01:25:51 | INFO     | Created AdminFlag: Registration = True
+2026-06-08 01:25:51 | INFO     | Created AdminFlag: Send Telemetry = True
+2026-06-08 01:25:51 | INFO     | Created Custom Covers Dir settings in the db.
+2026-06-08 01:25:51 | INFO     | Created 1 missing auth tokens for users.
+2026-06-08 01:25:51 | INFO     | Codex is being served without a url path prefix.
+2026-06-08 01:25:51 | SUCCESS  | Running Codex v1.10.8
+2026-06-08 01:25:51 | SUCCESS  | BroadcastListener started.
+2026-06-08 01:25:52 | WARNING  | Cannot detect or read from CBR archives
+2026-06-08 01:25:52 | INFO     | Asking granian to shut down gracefully. Could take 10 seconds...
+2026-06-08 01:25:52 | INFO     | BroadcastListener shutdown
+2026-06-08 01:25:53 | WARNING  | Cannot detect or read from CBR archives
+2026-06-08 01:25:54 | WARNING  | Cannot detect or read from CBR archives
+2026-06-08 01:25:54 | WARNING  | Cannot detect or read from CBR archives
+2026-06-08 01:25:54 | INFO     | LibrarianDaemon started all threads.
+2026-06-08 01:25:54 | SUCCESS  | LibrarianDaemon ready for tasks.
+2026-06-08 01:25:54 | INFO     | Shutting down LibrarianDaemon...
+2026-06-08 01:25:54 | ERROR    | ScribeThread crashed:
+Traceback (most recent call last):
+
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044, in _bootstrap
+    self._bootstrap_inner()
+    │    └ <function Thread._bootstrap_inner at 0x1012bd380>
+    └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+    self._context.run(self.run)
+    │    │        │   │    └ <function QueuedThread.run at 0x116dd75e0>
+    │    │        │   └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+    │    │        └ <method 'run' of '_contextvars.Context' objects>
+    │    └ <_contextvars.Context object at 0x122183e40>
+    └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+> File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/codex/librarian/threads.py", line 92, in run
+    self._check_item()
+    │    └ <function QueuedThread._check_item at 0x116dd7480>
+    └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/codex/librarian/threads.py", line 78, in _check_item
+    item = self.queue.get(timeout=timeout)
+           │    │     │           └ None
+           │    │     └ <function Queue.get at 0x10682fa00>
+           │    └ <queue.PriorityQueue object at 0x122155400>
+           └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/queue.py", line 213, in get
+    item = self._get()
+           │    └ <function PriorityQueue._get at 0x106844250>
+           └ <queue.PriorityQueue object at 0x122155400>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/queue.py", line 296, in _get
+    return heappop(self.queue)
+           │       │    └ [((20, 1780862154.968858), SearchIndexSyncTask(rebuild=False)), (0, 'shutdown')]
+           │       └ <queue.PriorityQueue object at 0x122155400>
+           └ <built-in function heappop>
+
+TypeError: '<' not supported between instances of 'int' and 'tuple'
+2026-06-08 01:25:54 | INFO     | Library /Users/soham/japan baby/config/custom-covers waiting for manual poll.
+2026-06-08 01:25:54 | ERROR    | Update search index
+Traceback (most recent call last):
+
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044, in _bootstrap
+    self._bootstrap_inner()
+    │    └ <function Thread._bootstrap_inner at 0x1012bd380>
+    └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+    self._context.run(self.run)
+    │    │        │   │    └ <function QueuedThread.run at 0x116dd75e0>
+    │    │        │   └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+    │    │        └ <method 'run' of '_contextvars.Context' objects>
+    │    └ <_contextvars.Context object at 0x122183e40>
+    └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/codex/librarian/threads.py", line 92, in run
+    self._check_item()
+    │    └ <function QueuedThread._check_item at 0x116dd7480>
+    └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/codex/librarian/threads.py", line 81, in _check_item
+    self.process_item(item)
+    │    │            └ ((20, 1780862154.968858), SearchIndexSyncTask(rebuild=False))
+    │    └ <function ScribeThread.process_item at 0x12213e090>
+    └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/codex/librarian/scribe/scribed.py", line 91, in process_item
+    worker.handle_task(task)
+    │      │           └ SearchIndexSyncTask(rebuild=False)
+    │      └ <function SearchIndexer.handle_task at 0x122117270>
+    └ <codex.librarian.scribe.search.handler.SearchIndexer object at 0x122156510>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/codex/librarian/scribe/search/handler.py", line 20, in handle_task
+    self.update_search_index(rebuild=task.rebuild)
+    │    │                           │    └ False
+    │    │                           └ SearchIndexSyncTask(rebuild=False)
+    │    └ <function SearchIndexerSync.update_search_index at 0x122130930>
+    └ <codex.librarian.scribe.search.handler.SearchIndexer object at 0x122156510>
+> File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/codex/librarian/scribe/search/sync.py", line 322, in update_search_index
+    self._update_search_index(rebuild=rebuild)
+    │    │                            └ False
+    │    └ <function SearchIndexerSync._update_search_index at 0x1221307d0>
+    └ <codex.librarian.scribe.search.handler.SearchIndexer object at 0x122156510>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/codex/librarian/scribe/search/sync.py", line 292, in _update_search_index
+    if self.abort_event.is_set():
+       │    │           └ <function EventProxy.is_set at 0x122189bc0>
+       │    └ <EventProxy object, typeid 'Event' at 0x1220e3610>
+       └ <codex.librarian.scribe.search.handler.SearchIndexer object at 0x122156510>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/multiprocessing/managers.py", line 1106, in is_set
+    return self._callmethod('is_set')
+           │    └ <function BaseProxy._callmethod at 0x122188510>
+           └ <EventProxy object, typeid 'Event' at 0x1220e3610>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/multiprocessing/managers.py", line 848, in _callmethod
+    raise convert_to_error(kind, result)
+          │                └ '#TRACEBACK'
+          └ <function convert_to_error at 0x122176820>
+
+multiprocessing.managers.RemoteError: 
+---------------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/multiprocessing/managers.py", line 264, in serve_client
+    self.id_to_local_proxy_obj[ident]
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+KeyError: '123aa3350'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/multiprocessing/managers.py", line 266, in serve_client
+    raise ke
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/multiprocessing/managers.py", line 260, in serve_client
+    obj, exposed, gettypeid = id_to_obj[ident]
+                              ~~~~~~~~~^^^^^^^
+KeyError: '123aa3350'
+---------------------------------------------------------------------------
+2026-06-08 01:25:54 | ERROR    | ScribeThread crashed:
+Traceback (most recent call last):
+
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1044, in _bootstrap
+    self._bootstrap_inner()
+    │    └ <function Thread._bootstrap_inner at 0x1012bd380>
+    └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/threading.py", line 1082, in _bootstrap_inner
+    self._context.run(self.run)
+    │    │        │   │    └ <function QueuedThread.run at 0x116dd75e0>
+    │    │        │   └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+    │    │        └ <method 'run' of '_contextvars.Context' objects>
+    │    └ <_contextvars.Context object at 0x122183e40>
+    └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+> File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/codex/librarian/threads.py", line 92, in run
+    self._check_item()
+    │    └ <function QueuedThread._check_item at 0x116dd7480>
+    └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/codex/librarian/threads.py", line 81, in _check_item
+    self.process_item(item)
+    │    │            └ ((20, 1780862154.968858), SearchIndexSyncTask(rebuild=False))
+    │    └ <function ScribeThread.process_item at 0x12213e090>
+    └ <ScribeThread(ScribeThread, started daemon 6317289472)>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/codex/librarian/scribe/scribed.py", line 91, in process_item
+    worker.handle_task(task)
+    │      │           └ SearchIndexSyncTask(rebuild=False)
+    │      └ <function SearchIndexer.handle_task at 0x122117270>
+    └ <codex.librarian.scribe.search.handler.SearchIndexer object at 0x122156510>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/codex/librarian/scribe/search/handler.py", line 20, in handle_task
+    self.update_search_index(rebuild=task.rebuild)
+    │    │                           │    └ False
+    │    │                           └ SearchIndexSyncTask(rebuild=False)
+    │    └ <function SearchIndexerSync.update_search_index at 0x122130930>
+    └ <codex.librarian.scribe.search.handler.SearchIndexer object at 0x122156510>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/codex/librarian/scribe/search/sync.py", line 326, in update_search_index
+    if self.abort_event.is_set():
+       │    │           └ <function EventProxy.is_set at 0x122189bc0>
+       │    └ <EventProxy object, typeid 'Event' at 0x1220e3610>
+       └ <codex.librarian.scribe.search.handler.SearchIndexer object at 0x122156510>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/multiprocessing/managers.py", line 1106, in is_set
+    return self._callmethod('is_set')
+           │    └ <function BaseProxy._callmethod at 0x122188510>
+           └ <EventProxy object, typeid 'Event' at 0x1220e3610>
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/multiprocessing/managers.py", line 848, in _callmethod
+    raise convert_to_error(kind, result)
+          │                └ '#TRACEBACK'
+          └ <function convert_to_error at 0x122176820>
+
+multiprocessing.managers.RemoteError: 
+---------------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/multiprocessing/managers.py", line 264, in serve_client
+    self.id_to_local_proxy_obj[ident]
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+KeyError: '123aa3350'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/multiprocessing/managers.py", line 266, in serve_client
+    raise ke
+  File "/Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/multiprocessing/managers.py", line 260, in serve_client
+    obj, exposed, gettypeid = id_to_obj[ident]
+                              ~~~~~~~~~^^^^^^^
+KeyError: '123aa3350'
+---------------------------------------------------------------------------
+2026-06-08 01:25:55 | SUCCESS  | Goodbye.

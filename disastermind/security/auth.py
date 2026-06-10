@@ -50,8 +50,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 # Topic/constant strings are owned by THIS package (HARD RULE 3 — never edit
 # core/contracts.py). These are the env vars the TokenStore reads.
@@ -205,7 +206,7 @@ class TokenStore:
 
     # ------------------------------------------------------------------ factories
     @classmethod
-    def from_env(cls, environ: dict[str, str] | None = None) -> "TokenStore":
+    def from_env(cls, environ: dict[str, str] | None = None) -> TokenStore:
         """Build from process env (``DM_API_KEYS`` / ``DM_API_KEYS_MAP`` / ``DM_API_SCOPES``).
 
         All sources merge; the named-map form wins on collisions so an operator
@@ -225,7 +226,7 @@ class TokenStore:
         return store
 
     @classmethod
-    def from_settings(cls, settings: Any | None = None) -> "TokenStore":
+    def from_settings(cls, settings: Any | None = None) -> TokenStore:
         """Build from :class:`~disastermind.core.config.Settings`.
 
         Settings is dependency-light and reads the same env vars at construction;
@@ -379,7 +380,7 @@ class AuthError(Exception):
         super().__init__(message)
 
 
-def require_auth(service: Any, store: TokenStore | None = None) -> "AuthGuard":
+def require_auth(service: Any, store: TokenStore | None = None) -> AuthGuard:
     """Wrap a service so its public methods require a valid token (PRD Step 7).
 
     Framework-agnostic factory. Returns an :class:`AuthGuard` that proxies the

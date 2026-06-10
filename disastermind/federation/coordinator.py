@@ -22,8 +22,9 @@ unless you opt into ``live=True`` at the call site.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any
 
 from ..core.contracts import Message, Priority
 from ..models.domain import Asset, AssetType, ResourceGap

@@ -17,12 +17,13 @@ through :meth:`BaseAgent.emit` and stays audit-logged (PRD Step 9).
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Any, Callable
+from typing import Any
 
 from ..core.bus import MessageBus
-from ..core.contracts import Message, MessageType, Topic
+from ..core.contracts import Message, Topic
 
 # New topic-string constant owned by THIS package (we never edit core/contracts.py).
 # The WebSocket /ws endpoint fans out every bus message it observes; consumers may
@@ -78,7 +79,7 @@ class DashboardService:
     _streaming: bool = False
     # Idempotency-Key -> first recorded approve/reject result. Bounded LRU so a
     # flood of unique keys cannot grow memory without bound (PRD Step 10).
-    _idem: "OrderedDict[str, dict[str, Any]]" = field(default_factory=OrderedDict)
+    _idem: OrderedDict[str, dict[str, Any]] = field(default_factory=OrderedDict)
     _idem_lock: Lock = field(default_factory=Lock)
 
     # ------------------------------------------------------------------ health

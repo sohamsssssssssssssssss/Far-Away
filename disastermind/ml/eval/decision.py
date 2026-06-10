@@ -104,7 +104,7 @@ def confusion_at(
     """Contingency counts with alarms defined as ``p >= threshold``."""
     labels, probs = _coerce(y_true, y_prob)
     tp = fp = fn = tn = 0
-    for lab, p in zip(labels, probs):
+    for lab, p in zip(labels, probs, strict=False):
         alarm = p >= threshold
         if alarm and lab:
             tp += 1

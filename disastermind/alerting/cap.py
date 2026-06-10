@@ -21,9 +21,9 @@ Reference: OASIS CAP v1.2 (urn:oasis:names:tc:emergency:cap:1.2).
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Iterable, Optional, Sequence
+from datetime import UTC, datetime
 from xml.etree import ElementTree as ET
 
 from ..llm import PublicAlert
@@ -85,7 +85,7 @@ def _event_label(event: DisasterEvent) -> str:
 
 def _iso_now() -> str:
     """CAP-style timestamp with explicit timezone offset (RFC 3339)."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
 
 def _normalise_sent(event: DisasterEvent) -> str:
@@ -151,9 +151,9 @@ def build_cap_alert(
     *,
     sender: str,
     area_desc: str,
-    polygon: Optional[Sequence[LatLon]] = None,
-    circle: Optional[tuple[LatLon, float]] = None,
-    identifier: Optional[str] = None,
+    polygon: Sequence[LatLon] | None = None,
+    circle: tuple[LatLon, float] | None = None,
+    identifier: str | None = None,
     status: str = "Actual",
     msg_type: str = "Alert",
     scope: str = "Public",

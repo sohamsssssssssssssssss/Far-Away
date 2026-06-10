@@ -13,9 +13,8 @@ backup cluster."
 """
 from __future__ import annotations
 
-import importlib
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from ..audit.decision_log import DecisionLogger
 from ..core.agent import BaseAgent

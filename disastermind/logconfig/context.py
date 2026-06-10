@@ -39,7 +39,7 @@ class BoundLogger(logging.LoggerAdapter):
         kwargs["extra"] = extra
         return msg, kwargs
 
-    def bind(self, **fields: Any) -> "BoundLogger":
+    def bind(self, **fields: Any) -> BoundLogger:
         """Return a new adapter with ``fields`` merged over the current ones."""
         merged = dict(self.extra or {})
         merged.update(fields)

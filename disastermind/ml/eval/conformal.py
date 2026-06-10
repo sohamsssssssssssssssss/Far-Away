@@ -163,7 +163,7 @@ def fit_conformal(
     if not 0.0 < alpha < 1.0:
         raise ValueError("alpha must be in (0, 1)")
     scores = sorted(
-        (1.0 - float(p)) if lab else float(p) for lab, p in zip(y_cal, p_cal)
+        (1.0 - float(p)) if lab else float(p) for lab, p in zip(y_cal, p_cal, strict=False)
     )
     return ConformalClassifier(scores=tuple(scores), alpha=alpha)
 
@@ -179,7 +179,7 @@ def coverage_report(
     """
     sets = clf.predict_sets(p_test)
     n = len(sets) or 1
-    covered = sum(1 for s, lab in zip(sets, y_test) if (1 if lab else 0) in s)
+    covered = sum(1 for s, lab in zip(sets, y_test, strict=False) if (1 if lab else 0) in s)
     singles = sum(1 for s in sets if len(s) == 1)
     empties = sum(1 for s in sets if not s)
     return {

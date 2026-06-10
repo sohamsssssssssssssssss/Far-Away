@@ -20,8 +20,6 @@ from __future__ import annotations
 
 from xml.etree import ElementTree as ET
 
-import pytest
-
 from disastermind.alerting import CAP_NAMESPACE
 from disastermind.core.bus import InMemoryBus
 from disastermind.core.config import Settings

@@ -532,7 +532,7 @@ def create_app(
 
         await websocket.accept()
         loop_ = asyncio.get_event_loop()
-        queue: "asyncio.Queue[dict[str, Any]]" = asyncio.Queue()
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
         def _push(payload: dict[str, Any]) -> None:
             loop_.call_soon_threadsafe(queue.put_nowait, payload)
@@ -553,7 +553,7 @@ def create_app(
                     return
                 try:
                     payload = await asyncio.wait_for(queue.get(), timeout=ws_ping)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Idle period elapsed: re-check the shutdown flag, then send a
                     # heartbeat. A dead/half-open peer raises here, dropping the
                     # connection (the finally cleans up).

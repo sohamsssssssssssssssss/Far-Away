@@ -26,7 +26,7 @@ from ...core.agent import BaseAgent
 from ...core.bus import MessageBus
 from ...core.contracts import Message, MessageType, Module, Priority, Tier, Topic
 from ...models.domain import CascadeFailure
-from .omori import OmoriParams, fit_params, probability_by_horizon
+from .omori import fit_params, probability_by_horizon
 
 # Collapse probability at/above which a building/segment is treated as a likely
 # aftershock cascade failure (already-weakened structure).
@@ -93,9 +93,7 @@ class EarthquakeCascadeAgent(BaseAgent):
 
         reasoning = [
             f"earthquake cascade for M{magnitude:.1f} depth={depth_km:.0f}km mainshock",
-            "Omori-Utsu aftershock forecast P(>=1 M{:.1f}+): ".format(
-                DAMAGING_AFTERSHOCK_MAG
-            )
+            f"Omori-Utsu aftershock forecast P(>=1 M{DAMAGING_AFTERSHOCK_MAG:.1f}+): "
             + ", ".join(f"{h}h={p:.2f}" for h, p in sorted(horizon_probs.items())),
             f"projected {len(failures)} weakened segment(s) at aftershock-collapse "
             f"risk (collapse p>={AFTERSHOCK_COLLAPSE_PROBABILITY})",

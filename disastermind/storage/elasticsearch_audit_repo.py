@@ -15,7 +15,8 @@ Backend selection (see :class:`~disastermind.storage.facade.Storage`):
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from ._common import to_jsonable
 

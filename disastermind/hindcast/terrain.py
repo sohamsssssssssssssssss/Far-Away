@@ -45,7 +45,7 @@ def _corr(xs: list[float], ys: list[float]) -> float:
     if len(xs) < 2:
         return 0.0
     mx, my = st.mean(xs), st.mean(ys)
-    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=False))
     den = math.sqrt(sum((x - mx) ** 2 for x in xs) * sum((y - my) ** 2 for y in ys))
     return num / den if den else 0.0
 
@@ -88,14 +88,14 @@ class TerrainValidation:
 
 
 def load_dem(path: str = FIXTURE) -> list[dict]:
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
 
 def _score(cells: list[dict], risk_fn, name: str) -> TerrainScore:
     risks = [risk_fn(c) for c in cells]
     elevs = [c["elev_m"] for c in cells]
-    ranked = sorted(zip(cells, risks), key=lambda t: -t[1])
+    ranked = sorted(zip(cells, risks, strict=False), key=lambda t: -t[1])
     top = ranked[: max(1, len(ranked) // 5)]
     low_frac = sum(1 for c, _ in top if c["elev_m"] < LOWLAND_M) / len(top)
     return TerrainScore(

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import asdict, dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from ..core.contracts import (
@@ -38,7 +38,7 @@ _KIND_REQUEST = "mutual_aid_request"
 _KIND_OFFER = "mutual_aid_offer"
 
 
-class AidDecision(str, Enum):
+class AidDecision(StrEnum):
     """A peer's response to an incoming mutual-aid request."""
 
     OFFER = "offer"
@@ -98,7 +98,7 @@ class AidRequest:
         cross_state: bool = False,
         note: str = "",
         request_id: str | None = None,
-    ) -> "AidRequest":
+    ) -> AidRequest:
         return AidRequest(
             request_id=request_id or f"AID-REQ-{uuid.uuid4().hex[:12]}",
             from_district=from_district,

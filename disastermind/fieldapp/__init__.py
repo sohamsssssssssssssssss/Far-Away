@@ -23,6 +23,8 @@ only created when explicit team ids are supplied.
 """
 from __future__ import annotations
 
+from .client import MockFieldClient
+from .closure import attach_field_clients
 from .contracts import (
     FIELDAPP_ACK,
     DeploymentOrderMsg,
@@ -30,8 +32,6 @@ from .contracts import (
     SiteOverCapacityReport,
     TeamStatusUpdate,
 )
-from .client import MockFieldClient
-from .closure import attach_field_clients
 
 __all__ = [
     "DeploymentOrderMsg",

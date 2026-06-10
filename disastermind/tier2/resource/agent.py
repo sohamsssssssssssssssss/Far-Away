@@ -28,6 +28,7 @@ import uuid
 from dataclasses import asdict
 from typing import Any
 
+from ...audit.decision_log import DecisionLogger
 from ...core.agent import BaseAgent
 from ...core.bus import MessageBus
 from ...core.contracts import (
@@ -39,7 +40,6 @@ from ...core.contracts import (
     Tier,
     Topic,
 )
-from ...audit.decision_log import DecisionLogger
 from ...models.domain import (
     Asset,
     AssetType,

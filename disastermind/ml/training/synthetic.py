@@ -178,7 +178,7 @@ def label_for(module: Module, row: Sequence[float]) -> float:
     """
     specs = _specs_for(module)
     score = _INTERCEPT[module]
-    for spec, value in zip(specs, row):
+    for spec, value in zip(specs, row, strict=False):
         score += spec.weight * (float(value) / (spec.scale or 1.0))
     return _clamp01(_logistic(score))
 

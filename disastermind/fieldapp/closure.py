@@ -26,7 +26,8 @@ unaffected. Stdlib-only; no network I/O.
 """
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from ..core.bus import MessageBus
 from ..models.domain import AssetType
@@ -109,7 +110,7 @@ def _resolve_team_specs(loop: Any, team_ids: Iterable[Any] | None) -> list[Any]:
       3. the standard scenario roster (``scenarios.base.DEFAULT_TEAMS``).
     """
     if team_ids is not None:
-        return [s for s in team_ids]
+        return list(team_ids)
     from_coord = _specs_from_coordinator(loop)
     if from_coord:
         return from_coord

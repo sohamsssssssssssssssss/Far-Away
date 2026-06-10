@@ -23,9 +23,10 @@ from __future__ import annotations
 
 import functools
 import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Iterable
+from enum import StrEnum
+from typing import Any
 
 
 # --------------------------------------------------------------------------- retry
@@ -122,7 +123,7 @@ def retry(
 
 
 # ------------------------------------------------------------------- circuit breaker
-class BreakerState(str, Enum):
+class BreakerState(StrEnum):
     """The three states of a :class:`CircuitBreaker`."""
 
     CLOSED = "closed"      # healthy: calls flow through

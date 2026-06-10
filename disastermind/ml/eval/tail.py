@@ -89,7 +89,7 @@ def tail_report(
             row["brier"] = None
 
         # Severe-vs-rest discrimination across the full test set.
-        sv = [1 if (m and lab) else 0 for m, lab in zip(in_slice, y_true)]
+        sv = [1 if (m and lab) else 0 for m, lab in zip(in_slice, y_true, strict=False)]
         if 0 < sum(sv) < len(sv):
             auc, alo, ahi = bootstrap_ci(
                 sv, list(y_prob), metric=roc_auc, n_boot=n_boot, seed=seed

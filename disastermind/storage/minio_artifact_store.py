@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
-from typing import Iterator
+from collections.abc import Iterator
 
 log = logging.getLogger("disastermind.storage.minio")
 

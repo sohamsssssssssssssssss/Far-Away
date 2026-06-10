@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import pytest
 
+from disastermind.core.config import Settings
 from disastermind.ops import (
     BreakerState,
     CircuitBreaker,
@@ -30,7 +31,6 @@ from disastermind.ops import (
     retry,
     validate_settings,
 )
-from disastermind.core.config import Settings
 
 
 # --------------------------------------------------------------- circuit breaker

@@ -25,8 +25,8 @@ from __future__ import annotations
 import os
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 # Env knobs (owned by THIS package). Off-path defaults are generous so the
 # limiter never trips an existing deployment unless explicitly tuned.
@@ -123,7 +123,7 @@ class RateLimiter:
     )
     clock: Callable[[], float] = time.monotonic
     _buckets: dict[str, _Bucket] = field(default_factory=dict, repr=False)
-    _lock: "threading.Lock" = field(default_factory=threading.Lock, repr=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def __post_init__(self) -> None:
         if self.capacity <= 0:
@@ -188,7 +188,7 @@ class RateLimiter:
 
 
 # ----------------------------------------------------------------- per-IP limiting
-def ip_rate_limiter(clock: Callable[[], float] = time.monotonic) -> "RateLimiter":
+def ip_rate_limiter(clock: Callable[[], float] = time.monotonic) -> RateLimiter:
     """Build a :class:`RateLimiter` tuned for per-CLIENT-IP buckets (PRD Step 7).
 
     Reads the dedicated ``DM_RATE_IP_*`` knobs (separate from the per-principal

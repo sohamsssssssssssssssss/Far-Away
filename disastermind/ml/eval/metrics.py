@@ -72,7 +72,7 @@ def roc_auc(y_true: Sequence[Any], y_prob: Sequence[Any]) -> float:
             ranks[order[k]] = avg
         i = j + 1
 
-    sum_pos_ranks = sum(r for r, lab in zip(ranks, labels) if lab == 1)
+    sum_pos_ranks = sum(r for r, lab in zip(ranks, labels, strict=False) if lab == 1)
     # Mann-Whitney U for positives, then normalise to AUC.
     u_pos = sum_pos_ranks - n_pos * (n_pos + 1) / 2.0
     return u_pos / (n_pos * n_neg)
@@ -83,7 +83,7 @@ def brier_score(y_true: Sequence[Any], y_prob: Sequence[Any]) -> float:
     labels, probs = _coerce(y_true, y_prob)
     if not labels:
         return 0.0
-    return sum((p - lab) ** 2 for p, lab in zip(probs, labels)) / len(labels)
+    return sum((p - lab) ** 2 for p, lab in zip(probs, labels, strict=False)) / len(labels)
 
 
 def accuracy_at(
@@ -93,7 +93,7 @@ def accuracy_at(
     labels, probs = _coerce(y_true, y_prob)
     if not labels:
         return 0.0
-    correct = sum(1 for p, lab in zip(probs, labels) if (1 if p >= threshold else 0) == lab)
+    correct = sum(1 for p, lab in zip(probs, labels, strict=False) if (1 if p >= threshold else 0) == lab)
     return correct / len(labels)
 
 
@@ -135,7 +135,7 @@ def calibration_bins(
     sums = [0.0] * n_bins
     pos = [0] * n_bins
     cnt = [0] * n_bins
-    for p, lab in zip(probs, labels):
+    for p, lab in zip(probs, labels, strict=False):
         pc = 0.0 if p < 0.0 else 1.0 if p > 1.0 else p
         idx = int(pc / width)
         if idx >= n_bins:  # pc == 1.0 -> last bin

@@ -13,7 +13,7 @@ do not need to import the domain model.
 """
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from .graph import RoadGraph
 

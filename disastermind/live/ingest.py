@@ -28,7 +28,8 @@ no test path can reach a real socket.
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from ..core.contracts import Message, MessageType, Topic
 

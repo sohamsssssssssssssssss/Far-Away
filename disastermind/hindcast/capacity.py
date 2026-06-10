@@ -57,7 +57,7 @@ class CapacityValidation:
 
 
 def load_capacity(path: str = FIXTURE) -> dict:
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
 
@@ -134,7 +134,7 @@ def to_markdown(v: CapacityValidation) -> str:
             f"- **Population (at risk):** {v.population:,} — {v.population_source}",
             f"- **Shelters:** {v.n_shelters} real buildings, {v.total_floor_m2:,} m^2 "
             "total footprint",
-            f"- **Largest:** "
+            "- **Largest:** "
             + ", ".join(f"{n} ({a:,} m^2)" for n, a in v.largest_shelters[:3]),
             "",
             "## Capacity vs need",

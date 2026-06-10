@@ -22,8 +22,8 @@ Pure stdlib (``math`` + ``heapq``). No third-party imports, no network.
 from __future__ import annotations
 
 import heapq
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
-from typing import Iterable, Iterator
 
 from ..models.geo import LatLon, haversine
 
@@ -141,7 +141,7 @@ class RoadGraph:
             Edge(e.u, e.v, e.length_m, e.segment_id, e.name, closed) for e in edges
         ]
         self._by_segment[segment_id] = new_edges
-        replaced = {id(old): new for old, new in zip(edges, new_edges)}
+        replaced = {id(old): new for old, new in zip(edges, new_edges, strict=False)}
         for k, adj in self._adj.items():
             self._adj[k] = [replaced.get(id(e), e) for e in adj]
         return True

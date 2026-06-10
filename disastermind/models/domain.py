@@ -8,13 +8,13 @@ constraint, Step 5 priority order) is first-class here.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 from .geo import LatLon
 
 
 # --------------------------------------------------------------------------- events
-class EventKind(str, Enum):
+class EventKind(StrEnum):
     CYCLONE = "cyclone"
     FLOOD = "flood"
     EARTHQUAKE = "earthquake"
@@ -101,7 +101,7 @@ class CascadeFailure:
 
 
 # ----------------------------------------------------------------------- resources
-class AssetType(str, Enum):
+class AssetType(StrEnum):
     BOAT = "boat"
     HELICOPTER = "helicopter"
     NDRF_TEAM = "ndrf_team"

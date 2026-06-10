@@ -92,7 +92,7 @@ def backup_audit(src_path: str, dest_dir: str, *, stamp: str) -> BackupManifest:
 
 def read_manifest(backup_dir: str) -> BackupManifest:
     """Load the :class:`BackupManifest` written by :func:`backup_audit`."""
-    with open(os.path.join(backup_dir, MANIFEST_NAME), "r", encoding="utf-8") as fh:
+    with open(os.path.join(backup_dir, MANIFEST_NAME), encoding="utf-8") as fh:
         data = json.load(fh)
     return BackupManifest(
         stamp=data["stamp"],

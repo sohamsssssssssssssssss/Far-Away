@@ -6,8 +6,6 @@ server enforces bearer-token auth on data routes while leaving the static UI and
 """
 from __future__ import annotations
 
-import os
-
 import pytest
 
 pytest.importorskip("fastapi")

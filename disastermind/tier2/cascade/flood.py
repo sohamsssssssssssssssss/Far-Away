@@ -207,7 +207,7 @@ class FloodCascadeAgent(BaseAgent):
 
         # ~400 m expressed in degrees (rough, adequate at city scale)
         influence_deg = 400.0 / 111_320.0
-        parsed: list[tuple[int, float, "Point"]] = []
+        parsed: list[tuple[int, float, Point]] = []
         for cell in risk_cells:
             pt = self._cell_point(cell)
             if pt is None:

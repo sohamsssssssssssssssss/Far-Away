@@ -19,7 +19,6 @@ from disastermind.core.contracts import (
     Priority,
     Topic,
 )
-from disastermind.models.geo import LatLon
 from disastermind.tier2.resource.agent import ResourceAllocationAgent
 from disastermind.tier2.routing.agent import EvacuationRoutingAgent
 

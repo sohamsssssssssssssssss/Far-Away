@@ -110,7 +110,7 @@ class LiveSystem:
         live_feeds: bool = False,
         bus: MessageBus | None = None,
         storage: Any | None = None,
-    ) -> "LiveSystem":
+    ) -> LiveSystem:
         """Wire the full system for deployment (PRD Step 9/10).
 
         Parameters
@@ -324,7 +324,7 @@ def _storage_all_fallback(storage: Any) -> bool:
         return True
 
 
-def _call_health(fn, system: "LiveSystem"):
+def _call_health(fn, system: LiveSystem):
     """Invoke an external health fn, trying the loop then the system then no-arg."""
     for arg in (system.loop, system):
         try:

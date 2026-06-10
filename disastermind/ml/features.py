@@ -81,7 +81,7 @@ class FeatureVector:
 
     def as_dict(self) -> dict[str, float]:
         """name -> value mapping (the shape SHAP attributions use)."""
-        return {n: v for n, v in zip(self.names, self.values)}
+        return dict(zip(self.names, self.values, strict=False))
 
     def as_list(self) -> list[float]:
         return list(self.values)

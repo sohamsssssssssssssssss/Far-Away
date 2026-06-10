@@ -22,8 +22,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from disastermind.audit.decision_log import DecisionLogger
 from disastermind.core.bus import InMemoryBus
 from disastermind.core.config import Settings
@@ -333,7 +331,6 @@ def test_per_feed_breakers_are_independent():
 # ====================================================== ops-absent fallback
 def test_falls_back_to_poll_feeds_when_ops_absent(monkeypatch):
     """If ops import fails on the live path, degrade to a plain live poll."""
-    import disastermind.live.resilient as resilient_mod
 
     real_import = __import__
 

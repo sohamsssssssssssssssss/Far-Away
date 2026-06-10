@@ -231,7 +231,7 @@ def solve_lp(assets: list[AssetView], cells: list[DemandCell]) -> OptimisationRe
     cell_by_id = {c.cell_id: c for c in cells}
     asset_by_id = {a.asset_id: a for a in assets}
 
-    x: dict[tuple[str, str], "pulp.LpVariable"] = {}
+    x: dict[tuple[str, str], pulp.LpVariable] = {}
     value: dict[tuple[str, str], float] = {}
     dist: dict[tuple[str, str], float] = {}
     for a in assets:

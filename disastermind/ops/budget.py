@@ -24,8 +24,9 @@ socket, or starts a thread. Inert by default.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 Clock = Callable[[], float]
 
@@ -57,7 +58,7 @@ class Timer:
     started_at: float | None = field(default=None, init=False)
     stopped_at: float | None = field(default=None, init=False)
 
-    def __enter__(self) -> "Timer":
+    def __enter__(self) -> Timer:
         self.started_at = self.clock()
         self.stopped_at = None
         return self
@@ -110,7 +111,7 @@ class LatencyBudget:
         if self.budget < 0:
             raise ValueError("budget must be >= 0")
 
-    def __enter__(self) -> "LatencyBudget":
+    def __enter__(self) -> LatencyBudget:
         self.started_at = self.clock()
         self.stopped_at = None
         return self
@@ -180,7 +181,7 @@ class ReadinessAggregator:
     empty_is_ready: bool = True
     _signals: list[tuple[str, ReadinessSignal]] = field(default_factory=list, init=False)
 
-    def register(self, name: str, signal: ReadinessSignal) -> "ReadinessAggregator":
+    def register(self, name: str, signal: ReadinessSignal) -> ReadinessAggregator:
         """Register a readiness ``signal`` under ``name``. Returns self (chainable)."""
         self._signals.append((name, signal))
         return self

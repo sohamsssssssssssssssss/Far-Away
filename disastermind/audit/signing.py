@@ -104,7 +104,7 @@ def verify_signed(path: str, secret: str | bytes | None = None) -> bool:
     if not os.path.exists(sig):
         return False
     try:
-        with open(sig, "r", encoding="utf-8") as fh:
+        with open(sig, encoding="utf-8") as fh:
             stored = fh.read().strip()
         expected = compute_signature(path, secret)
     except (OSError, AuditSecretMissing):

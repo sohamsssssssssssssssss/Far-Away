@@ -178,7 +178,7 @@ class IncidentReport:
         """Render the report as a human-readable Markdown after-action review."""
         scope = self.incident_id or "ALL INCIDENTS"
         L: list[str] = []
-        L.append(f"# DisasterMind After-Action Report")
+        L.append("# DisasterMind After-Action Report")
         L.append("")
         L.append(f"- **Incident:** {scope}")
         L.append(f"- **Generated:** {self.generated_at}")
@@ -378,7 +378,7 @@ class IncidentReporter:
     def _read_jsonl(path: str) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         try:
-            with open(path, "r", encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 for line in fh:
                     line = line.strip()
                     if not line:

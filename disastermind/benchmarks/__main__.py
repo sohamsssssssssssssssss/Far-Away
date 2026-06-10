@@ -15,7 +15,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Sequence, TextIO
+from collections.abc import Sequence
+from typing import TextIO
 
 from .harness import drive_n_incidents
 from .report import report, to_markdown
