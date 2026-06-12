@@ -23,6 +23,17 @@ export function Field() {
     }
   }
 
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+
+  if (isMobile) {
+    return (
+      <main className="field-module-native">
+        <div className="screen-shell">{renderScreen()}</div>
+        <BottomNav activeScreen={activeScreen} onChange={setActiveScreen} />
+      </main>
+    )
+  }
+
   return (
     <main className="field-module">
       <div className="field-stage">
