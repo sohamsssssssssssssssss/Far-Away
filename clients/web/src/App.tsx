@@ -8,10 +8,8 @@ import { TopNav, type UnifiedModuleKey } from './shell/TopNav'
 import { OfflineBanner } from './components/OfflineBanner'
 
 function App() {
-  const [activeModule, setActiveModule] = useState<UnifiedModuleKey>('dashboard')
-  useEffect(() => {
-    if (window.innerWidth <= 430 || /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) setActiveModule("field")
-  }, [])
+  const isMobile = window.innerWidth <= 430 or /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  const [activeModule, setActiveModule] = useState<UnifiedModuleKey>(isMobile ? 'field' : 'dashboard')
   const [bootState, setBootState] = useState<'splash' | 'transition' | 'ready'>('splash')
 
   useEffect(() => {
