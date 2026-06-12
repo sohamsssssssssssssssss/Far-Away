@@ -10,7 +10,7 @@ import { OfflineBanner } from './components/OfflineBanner'
 function App() {
   const [activeModule, setActiveModule] = useState<UnifiedModuleKey>('dashboard')
   useEffect(() => {
-    if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) setActiveModule("field")
+    if (window.innerWidth <= 430 || /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) setActiveModule("field")
   }, [])
   const [bootState, setBootState] = useState<'splash' | 'transition' | 'ready'>('splash')
 
