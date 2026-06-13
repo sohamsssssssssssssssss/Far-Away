@@ -405,6 +405,99 @@ def create_app(
 
     _route("/validation/cyclone", validation_cyclone, methods=["GET"])
 
+    # ------------------------------------------------ post-incident report (Step 9)
+    def report_generate() -> Any:
+        """Generate a post-incident report from the live system's audit + bus.
+
+        Replaces the frontend's insecure browser->Anthropic call: the Anthropic
+        key stays SERVER-SIDE (never shipped to the client), the model is
+        ``claude-opus-4-8`` via the llm layer, and it degrades to a deterministic
+        template + the always-available structured report when no key is set.
+        Returns ``{markdown, report, narrative, narrative_source}``.
+        """
+        try:
+            from ..reporting import IncidentReporter
+
+            bus = getattr(loop, "bus", None)
+            lg = getattr(loop, "logger", None)
+            report = IncidentReporter(bus=bus, logger=lg).generate()
+            out: dict[str, Any] = {"report": report.to_dict(), "markdown": report.to_markdown()}
+        except Exception:  # pragma: no cover - never take the box down
+            return JSONResponse({"error": "report unavailable"}, status_code=503)
+        # Executive summary. With a real Anthropic key (server-side) we ask
+        # claude-opus-4-8 for prose; otherwise (TemplateClient echoes its prompt)
+        # we synthesise a deterministic summary from the report itself — never an
+        # echoed instruction.
+        rpt = out["report"]
+        deterministic = (
+            f"Incident {rpt.get('incident_id') or 'n/a'}: {rpt.get('message_count', 0)} "
+            f"messages, {len(rpt.get('decisions', []))} decisions, "
+            f"{len(rpt.get('escalations', []))} escalations, "
+            f"{len(rpt.get('dispatch', []))} dispatch orders. "
+            "See the full report for the timeline, equity-weighted allocation and "
+            "SHAP-attributed predictions."
+        )
+        try:
+            from ..llm.client import make_client
+
+            client = make_client(getattr(loop, "settings", None))
+            if getattr(client, "name", "template") == "anthropic":
+                out["narrative"] = client.generate(
+                    "Write a concise (<=150 word) post-incident executive summary for "
+                    "an emergency commander, from this report:\n\n" + out["markdown"]
+                )
+                out["narrative_source"] = "anthropic"
+            else:
+                out["narrative"] = deterministic
+                out["narrative_source"] = "template"
+        except Exception:  # pragma: no cover - narrative is best-effort
+            out["narrative"] = deterministic
+            out["narrative_source"] = "template"
+        return out
+
+    _route("/report/generate", report_generate, methods=["POST", "GET"])
+
+    # ------------------------------------------------ LLM proxy (server-side key)
+    async def llm_generate(request: Request) -> Any:
+        """Server-side LLM proxy for the frontend's ``callLLM`` (report generator).
+
+        The browser must NOT call Anthropic directly (it would ship the key in the
+        bundle and needs the dangerous-direct-browser-access header). This proxies
+        ``{messages:[{role,content}]}`` to ``claude-opus-4-8`` with the key held
+        SERVER-SIDE, returning ``{text, source}``. With no key configured it
+        returns 503 so the caller falls back to its own deterministic report —
+        we never fake LLM prose.
+        """
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        messages = body.get("messages") if isinstance(body, dict) else None
+        if not isinstance(messages, list) or not messages:
+            return JSONResponse({"error": "messages[] required"}, status_code=400)
+        system = " ".join(
+            str(m.get("content", "")) for m in messages if m.get("role") == "system"
+        )
+        user = "\n".join(
+            str(m.get("content", "")) for m in messages if m.get("role") != "system"
+        )
+        prompt = (system + "\n\n" + user).strip()
+        try:
+            from ..llm.client import make_client
+
+            client = make_client(getattr(loop, "settings", None))
+            if getattr(client, "name", "template") != "anthropic":
+                return JSONResponse(
+                    {"error": "LLM not configured (set DM_ANTHROPIC_KEY); use local fallback",
+                     "source": "none"},
+                    status_code=503,
+                )
+            return {"text": client.generate(prompt), "source": "anthropic"}
+        except Exception:  # pragma: no cover - upstream failure -> caller falls back
+            return JSONResponse({"error": "LLM call failed", "source": "error"}, status_code=502)
+
+    _route("/llm/generate", llm_generate, methods=["POST"])
+
     # ------------------------------------------------------------------- topics
     def topics() -> dict[str, int]:
         return svc.topic_counts()
