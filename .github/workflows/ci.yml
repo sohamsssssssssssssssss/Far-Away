@@ -273,3 +273,32 @@ jobs:
 
       - name: Smoke-test the image (offline scenario, stdlib-only)
         run: docker run --rm disastermind:ci python -m disastermind simulate B
+
+  frontend:
+    name: frontend (vitest + tsc + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: clients/web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check (tsc)
+        run: npm run type-check
+
+      - name: Unit tests (vitest)
+        run: npm test
+
+      - name: Production build
+        run: npm run build
