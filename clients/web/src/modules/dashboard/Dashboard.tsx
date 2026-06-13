@@ -1,391 +1,164 @@
-import { useEffect, useState } from 'react'
-import { useApiStatus } from '../../hooks/useApiStatus'
-import { useMemo } from 'react'
-import { useOverrides } from '../../hooks/useOverrides'
-import { connectWebSocket } from '../../lib/disasterApi'
-import type { AgentMessage, WSConnectionState } from '../../lib/disasterApi'
-import { AgentFeed } from './components/AgentFeed'
-import { BriefingPanel } from './components/BriefingPanel'
-import { EscalationQueue } from './components/EscalationQueue'
+import { useEffect, useMemo, useState } from 'react'
+import { useApiStatus } from '@/hooks/useApiStatus'
+import { useEscalations } from '@/hooks/useEscalations'
+import { connectWebSocket } from '@/lib/disasterApi'
+import { SYNTHETIC_MAP_STATE } from '@/lib/mapTypes'
+import type { MapState, EscalationItem } from '@/lib/mapTypes'
+import { Card, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Icon } from '@/components/ui/icon'
+import { cn } from '@/lib/utils'
 import { LiveMap } from './components/LiveMap'
-import { MapLegend } from './components/MapLegend'
-import { ResourcePanel } from './components/ResourcePanel'
-import { useDemoTimeline } from '../../lib/demoTimeline'
-import { SYNTHETIC_MAP_STATE, IMD_ALERTS } from '../../lib/mapTypes'
-import type { MapState, Shelter, EvacRouteShelter } from '../../lib/mapTypes'
-import { useBackendWS } from '../../hooks/useBackendWS'
-import type { BackendWSMessage } from '../../hooks/useBackendWS'
-import { BackendStatusBadge } from '../../components/BackendStatusBadge'
-import { PostIncidentReport } from '../../components/PostIncidentReport'
-import type { AuditEntry } from '../../services/reportService'
-import { fetchHealth } from '../../services/backendService'
+import { DeploymentsTable } from './components/DeploymentsTable'
 
-function AlertTicker() {
-  const alerts = IMD_ALERTS
-  const [idx, setIdx] = useState(0)
+/* ------------------------------------------------------------------ helpers */
 
+function useNow(intervalMs = 1000) {
+  const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    const t = setInterval(() => setIdx(i => (i + 1) % alerts.length), 5000)
-    return () => clearInterval(t)
-  }, [])
+    const t = window.setInterval(() => setNow(Date.now()), intervalMs)
+    return () => window.clearInterval(t)
+  }, [intervalMs])
+  return now
+}
 
-  const alert = alerts[idx]
-  const color = alert.severity === 'RED' ? '#ef4444'
-    : alert.severity === 'ORANGE' ? '#f97316' : '#eab308'
+const PRIORITY_META: Record<
+  EscalationItem['priority'],
+  { label: string; border: string; text: string }
+> = {
+  CRITICAL: { label: 'Priority 1', border: 'border-l-error', text: 'text-error' },
+  HIGH: { label: 'Priority 2', border: 'border-l-on-tertiary-container', text: 'text-on-tertiary-container' },
+  MEDIUM: { label: 'Priority 3', border: 'border-l-secondary', text: 'text-secondary' },
+}
 
+const TRIGGER_ICON: Record<string, string> = {
+  MANDATORY_EVACUATION: 'crisis_alert',
+  CROSS_STATE_RESOURCE: 'local_shipping',
+  REQUISITION_INFRASTRUCTURE: 'apartment',
+  CRITICAL_INFRASTRUCTURE: 'electric_bolt',
+  MEDIA_BROADCAST: 'campaign',
+  ARMED_FORCES: 'shield',
+}
+
+function countdown(item: EscalationItem, now: number): string {
+  if (item.timeoutMs === Infinity) return 'MANUAL'
+  const remaining = item.timeoutMs - (now - item.createdAt)
+  if (remaining <= 0) return 'EXPIRED'
+  const total = Math.floor(remaining / 1000)
+  const m = String(Math.floor(total / 60)).padStart(2, '0')
+  const s = String(total % 60).padStart(2, '0')
+  return `T-${m}:${s}`
+}
+
+/* ------------------------------------------------------------ KPI card */
+
+interface KpiProps {
+  label: string
+  value: number | string
+  icon: string
+  hint: string
+  hintIcon: string
+  tone?: 'default' | 'critical'
+}
+
+function KpiCard({ label, value, icon, hint, hintIcon, tone = 'default' }: KpiProps) {
+  const critical = tone === 'critical'
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: '10px',
-      padding: '5px 16px',
-      background: `linear-gradient(90deg, ${color}18 0%, transparent 100%)`,
-      borderBottom: `1px solid ${color}30`,
-      fontSize: '11px',
-      fontFamily: 'monospace',
-      overflow: 'hidden',
-    }}>
-      <span style={{
-        color,
-        fontWeight: 700,
-        fontSize: '9px',
-        letterSpacing: '0.1em',
-        whiteSpace: 'nowrap',
-        flexShrink: 0,
-      }}>
-        ⚠ IMD {alert.severity}
-      </span>
-      <span style={{ color: '#cbd5e1', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        {alert.headline}
-      </span>
-      <span style={{ color: '#475569', fontSize: '9px', whiteSpace: 'nowrap', flexShrink: 0 }}>
-        {alert.district}
-      </span>
+    <Card
+      className={cn(
+        'flex flex-col justify-between p-4',
+        critical && 'border-error/20 bg-error-container/30',
+      )}
+    >
+      <div className="mb-2 flex items-start justify-between">
+        <span
+          className={cn(
+            'text-label-md uppercase',
+            critical ? 'text-on-error-container' : 'text-on-surface-variant',
+          )}
+        >
+          {label}
+        </span>
+        <Icon name={icon} className={cn('text-[22px]', critical ? 'text-on-error-container' : 'text-primary')} />
+      </div>
+      <div
+        className={cn(
+          'text-headline-lg',
+          critical ? 'text-on-error-container' : 'text-primary',
+        )}
+      >
+        {value}
+      </div>
+      <div
+        className={cn(
+          'mt-1 flex items-center gap-1 text-body-sm',
+          critical ? 'text-on-error-container' : 'text-on-surface-variant',
+        )}
+      >
+        <Icon name={hintIcon} className="text-[16px]" />
+        {hint}
+      </div>
+    </Card>
+  )
+}
+
+/* ------------------------------------------------ escalation queue item */
+
+interface QueueItemProps {
+  item: EscalationItem
+  now: number
+  onDispatch: (id: string) => void
+  onAcknowledge: (id: string) => void
+}
+
+function QueueItem({ item, now, onDispatch, onAcknowledge }: QueueItemProps) {
+  const meta = PRIORITY_META[item.priority]
+  const icon = TRIGGER_ICON[item.trigger] ?? 'warning'
+  return (
+    <div
+      className={cn(
+        'cursor-pointer rounded border border-l-4 border-outline-variant/30 bg-surface p-3 transition-colors hover:bg-surface-container-highest',
+        meta.border,
+      )}
+    >
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <span className={cn('flex items-center gap-1.5 text-label-md uppercase', meta.text)}>
+          <Icon name={icon} className="text-[16px]" />
+          {meta.label} · {item.trigger.replace(/_/g, ' ').toLowerCase()}
+        </span>
+        <span className="shrink-0 font-mono text-label-sm tabular-nums text-on-surface-variant">
+          {countdown(item, now)}
+        </span>
+      </div>
+      <h3 className="mb-1 text-body-md font-bold text-primary">{item.zone}</h3>
+      <p className="line-clamp-2 text-body-sm text-on-surface-variant">{item.memo.situation}</p>
+      {item.status === 'PENDING' && (
+        <div className="mt-2 flex gap-2">
+          <Button size="sm" variant="accent" onClick={() => onDispatch(item.id)}>
+            Dispatch
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => onAcknowledge(item.id)}>
+            Acknowledge
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
 
-function formatStatusTime(timestamp: string) {
-  const parsed = new Date(timestamp)
-  if (Number.isNaN(parsed.getTime())) {
-    return '--:--:--'
-  }
-
-  return parsed.toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  })
-}
+/* ------------------------------------------------------------- Dashboard */
 
 export function Dashboard() {
-  const { status, setWsState, recordMessage } = useApiStatus()
-  const [latestMessage, setLatestMessage] = useState<AgentMessage | null>(null)
-  const [lastMessageTime, setLastMessageTime] = useState('--:--:--')
-  const connectionState: WSConnectionState = status.backendOnline ? status.wsState : 'offline'
-
-  // Demo Timeline States
-  const [customFeedEntry, setCustomFeedEntry] = useState<{
-    agent: string
-    summary: string
-    detail: string
-    severity?: 'critical' | 'high' | 'medium' | 'low' | 'info'
-  } | null>(null)
-  const [timelineEscalations, setTimelineEscalations] = useState<any[]>([])
-  const [zone7OverrideState, setZone7OverrideState] = useState<'pending' | 'auto-executing' | 'approved' | 'overridden' | 'removed'>('pending')
-  const [showAutoExecBanner, setShowAutoExecBanner] = useState(false)
-  const [boatsAdjustment, setBoatsAdjustment] = useState(0)
+  const { status, setWsState } = useApiStatus()
+  const { escalations, pending, approve, overrideItem } = useEscalations()
   const [mapState, setMapState] = useState<MapState>(SYNTHETIC_MAP_STATE)
+  const now = useNow(1000)
 
-  const { overrides, submitOverride } = useOverrides()
-  const [overrideLogOpen, setOverrideLogOpen] = useState(false)
-  const [liveShelters, setLiveShelters] = useState<Shelter[] | undefined>(undefined)
-  const [backendWSLastMsgAt, setBackendWSLastMsgAt] = useState<number>(Date.now())
-
-  const [showReport, setShowReport] = useState(false)
-
-  // Assemble audit log from available data sources
-  const auditLog: AuditEntry[] = useMemo(() => {
-    const entries: AuditEntry[] = []
-
-    // Override records
-    overrides.forEach(r => {
-      entries.push({
-        id: r.id,
-        timestamp: r.timestamp,
-        agentId: r.agentType,
-        action: 'OVERRIDE',
-        operatorId: r.commanderId,
-        note: r.overrideReason,
-        payload: { originalAction: r.originalAction, propagatedTo: r.propagatedTo },
-      })
-    })
-
-    // Escalation records
-    // (escalations are managed in useEscalations inside EscalationQueue,
-    //  not directly accessible here. We add what we can from the demo state.)
-    if (timelineEscalations.length > 0) {
-      timelineEscalations.forEach(esc => {
-        if (zone7OverrideState === 'approved') {
-          entries.push({
-            id: `esc-approve-${Date.now()}`,
-            timestamp: Date.now(),
-            agentId: 'COMMANDER-AI',
-            action: 'APPROVE',
-            operatorId: 'CDR-SOHAM',
-            note: esc.situation,
-            payload: esc,
-          })
-        }
-        if (zone7OverrideState === 'auto-executing') {
-          entries.push({
-            id: `esc-auto-${Date.now()}`,
-            timestamp: Date.now(),
-            agentId: 'COMMANDER-AI',
-            action: 'AUTO_EXECUTED',
-            note: `Auto-executed: ${esc.situation}`,
-            payload: esc,
-          })
-        }
-      })
-    }
-
-    entries.sort((a, b) => b.timestamp - a.timestamp)
-    return entries
-  }, [overrides, timelineEscalations, zone7OverrideState])
-
-  // Health check on mount
-  useEffect(() => {
-    fetchHealth().then(ok => {
-      if (ok) {
-        console.log('Group A backend: LIVE — far-away-production.up.railway.app')
-      } else {
-        console.log('Group A backend: OFFLINE — using mock data')
-      }
-    })
-  }, [])
-
-  // Backend WebSocket for live message stream
-  const { connectionState: backendWSState } = useBackendWS((msg: BackendWSMessage) => {
-    // Update last message timestamp for staleness detection
-    setBackendWSLastMsgAt(Date.now())
-
-    // Log all non-routine frames
-    if (msg.type !== 'acknowledgement') {
-      console.debug('[BackendWS]', msg.topic, msg.type, msg.sender)
-    }
-
-    // instruction messages → prepend to agent feed
-    if (msg.type === 'instruction') {
-      const agentMsg: AgentMessage = {
-        id: msg.id,
-        sender: msg.sender,
-        recipient: msg.recipient,
-        type: 'instruction',
-        priority: msg.priority as 1 | 2 | 3 | 4 | 5,
-        payload: msg.payload,
-        reasoning: msg.reasoning,
-        ttl_seconds: msg.ttl_seconds,
-        topic: msg.topic,
-        incident_id: msg.incident_id,
-        module: msg.module as 'A' | 'B' | 'C' | 'ALL',
-        escalation_trigger: msg.escalation_trigger,
-        timestamp: msg.timestamp,
-      }
-      setLatestMessage(agentMsg)
-      setLastMessageTime(formatStatusTime(msg.timestamp))
-      recordMessage()
-    }
-
-    // escalation messages — handled by EscalationQueue via incomingMessage
-    if (msg.type === 'escalation') {
-      const escMsg: AgentMessage = {
-        id: msg.id,
-        sender: msg.sender,
-        recipient: msg.recipient,
-        type: 'escalation',
-        priority: msg.priority as 1 | 2 | 3 | 4 | 5,
-        payload: msg.payload,
-        reasoning: msg.reasoning,
-        ttl_seconds: msg.ttl_seconds,
-        topic: msg.topic,
-        incident_id: msg.incident_id,
-        module: msg.module as 'A' | 'B' | 'C' | 'ALL',
-        escalation_trigger: msg.escalation_trigger,
-        timestamp: msg.timestamp,
-      }
-      setLatestMessage(escMsg)
-    }
-
-    // tier2.routing_plan → update live shelter markers
-    if (msg.topic === 'tier2.routing_plan') {
-      const payloadShelters = msg.payload?.shelters as EvacRouteShelter[] | undefined
-      if (payloadShelters && Array.isArray(payloadShelters)) {
-        setLiveShelters(prev => {
-          const merged = prev ? [...prev] : []
-          payloadShelters.forEach(es => {
-            const idx = merged.findIndex(s => s.id === es.shelter_id)
-            const shelter: Shelter = {
-              id: es.shelter_id,
-              name: es.name,
-              district: '', // not provided by EvacRoute
-              lat: es.location.lat,
-              lon: es.location.lon,
-              capacity: es.capacity,
-              occupied: es.current_occupancy ?? 0,
-              status: es.status === 'full' ? 'FULL' : es.status === 'closed' ? 'CLOSED' : 'OPEN',
-              facilities: [],
-            }
-            if (idx >= 0) {
-              merged[idx] = shelter
-            } else {
-              merged.push(shelter)
-            }
-          })
-          return merged
-        })
-      }
-    }
-  })
-
-  // Demo Timeline callbacks
-  const {
-    demoStatus,
-    startDemo,
-    escalationApproved,
-    setEscalationApproved,
-    elapsedSeconds
-  } = useDemoTimeline({
-    onRiverWarning: () => {
-      setCustomFeedEntry({
-        agent: 'FLOOD-AI',
-        summary: 'Mahanadi river gauge CRITICAL — 98.7% capacity. Breach probability 84% within 6 hours.',
-        detail: 'Historical breach threshold exceeded → cascade flood model triggered → Zone 7 inundation projected',
-        severity: 'critical'
-      })
-    },
-    onZone7Escalation: () => {
-      setZone7OverrideState('pending')
-      setTimelineEscalations([
-        {
-          id: 'evac-zone-7-escalation',
-          title: 'MANDATORY EVACUATION — ZONE 7',
-          situation: '84,000 residents. FLOOD-AI projects inundation in 4.2 hours. Evacuation window: 2.8 hours.',
-          recommended: 'APPROVE',
-          decisionRequiredBy: new Date(Date.now() + 120000).toISOString(),
-          source: 'mock'
-        }
-      ])
-      setCustomFeedEntry({
-        agent: 'COMMANDER-AI',
-        summary: 'Escalating Zone 7 mandatory evacuation to human commander. Authority threshold exceeded.',
-        detail: 'Authority threshold exceeded.',
-        severity: 'high'
-      })
-      window.dispatchEvent(new CustomEvent('flash-escalation-tab'))
-    },
-    onAutoExecute: () => {
-      setZone7OverrideState('auto-executing')
-      setShowAutoExecBanner(true)
-      setTimeout(() => setShowAutoExecBanner(false), 8000)
-
-      setCustomFeedEntry({
-        agent: 'COMMANDER-AI',
-        summary: 'Auto-executed Zone 7 evacuation. Human window expired. 847 field units notified.',
-        detail: 'Commander override window missed → automatic system execution triggered → notifications broadcasted',
-        severity: 'critical'
-      })
-
-      setTimeout(() => {
-        setZone7OverrideState('removed')
-        setTimelineEscalations([])
-      }, 3000)
-    },
-    onAllClear: () => {
-      setCustomFeedEntry({
-        agent: 'PREDICTION-AI',
-        summary: 'Cyclone Remal weakening. Wind speed reduced to 94 km/h. Zone 7 evacuation proceeding.',
-        detail: 'Cyclone Remal weakening.',
-        severity: 'medium'
-      })
-      setBoatsAdjustment(-2)
-      window.dispatchEvent(new CustomEvent('cyclone-badge-amber'))
-    }
-  })
-
-  // Watch for elapsedSeconds === 360 and escalationApproved for the human approved feed entry
-  useEffect(() => {
-    if (elapsedSeconds === 360 && escalationApproved) {
-      setCustomFeedEntry({
-        agent: 'COMMANDER-AI',
-        summary: 'Human commander approved Zone 7 evacuation. Executing with human authority.',
-        detail: 'Human commander approved Zone 7 evacuation.',
-        severity: 'high'
-      })
-    }
-  }, [elapsedSeconds, escalationApproved])
-
-  const handleStartDemo = () => {
-    // Reset all states
-    setCustomFeedEntry(null)
-    setTimelineEscalations([])
-    setZone7OverrideState('pending')
-    setShowAutoExecBanner(false)
-    setBoatsAdjustment(0)
-    window.dispatchEvent(new CustomEvent('cyclone-badge-red'))
-    startDemo()
-  }
-
-  const handleApproveZone7 = () => {
-    setZone7OverrideState('approved')
-    setEscalationApproved(true)
-  }
-
-  const briefingContext = useMemo(() => ({
-    activeZones: ['Zone 6', 'Zone 7'],
-    agentDecisionCount: 12,
-    deployedBoats: 12,
-    deployedHelicopters: 4,
-    shelterUtilisation: 73,
-    topRiskZone: 'Zone 7',
-    topRiskProbability: 0.92,
-    lastEscalation: 'Mandatory evacuation — Zone 7',
-    minutesSinceLastBriefing: 15,
-  }), [])
-
-  // GPS drift simulation — every 8 seconds, jiggle team positions slightly
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMapState(prev => {
-        const teams = { ...prev.teams }
-        Object.keys(teams).forEach(id => {
-          // Small lat/lon deltas comparable to the pixel drift in MockMap
-          const maxDelta = id === 'UNIT-C1' ? 0.006 : 0.003
-          const dLat = (Math.random() * 2 - 1) * maxDelta
-          const dLon = (Math.random() * 2 - 1) * maxDelta
-          teams[id] = {
-            ...teams[id],
-            location: {
-              lat: teams[id].location.lat + dLat,
-              lon: teams[id].location.lon + dLon,
-            },
-          }
-        })
-        return { ...prev, teams }
-      })
-    }, 8000)
-    return () => clearInterval(interval)
-  }, [])
-
+  // ── Live telemetry: drive the map + unit positions from the Group A socket
   useEffect(() => {
     const disconnect = connectWebSocket(
       (message) => {
-        setLatestMessage(message)
-        setLastMessageTime(formatStatusTime(message.timestamp))
-        recordMessage()
-
-        // Group A WebSocket integration — update map state from live telemetry
         if (message.topic === 'tier3.iot_telemetry') {
           const p = message.payload as Record<string, unknown> | undefined
           if (p?.kind === 'gps_beacon') {
@@ -395,8 +168,8 @@ export function Dashboard() {
               status?: 'active' | 'staged' | 'distress' | 'offline'
               timestamp: string
             }>
-            readings.forEach(r => {
-              setMapState(prev => ({
+            readings.forEach((r) =>
+              setMapState((prev) => ({
                 ...prev,
                 teams: {
                   ...prev.teams,
@@ -407,273 +180,159 @@ export function Dashboard() {
                     timestamp: r.timestamp,
                   },
                 },
-              }))
-            })
+              })),
+            )
           }
         }
-
         if (message.topic === 'tier2.prediction') {
           const p = message.payload as Record<string, unknown> | undefined
           if (p?.risk_cells) {
-            setMapState(prev => ({
-              ...prev,
-              riskCells: p.risk_cells as typeof prev.riskCells,
-            }))
+            setMapState((prev) => ({ ...prev, riskCells: p.risk_cells as typeof prev.riskCells }))
           }
         }
       },
-      (state) => {
-        setWsState(state)
-      },
+      (state) => setWsState(state),
     )
+    return () => disconnect()
+  }, [setWsState])
 
-    return () => {
-      disconnect()
-    }
-  }, [setWsState, recordMessage])
+  // ── GPS drift simulation keeps the map alive when the backend is offline
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      setMapState((prev) => {
+        const teams = { ...prev.teams }
+        Object.keys(teams).forEach((id) => {
+          const maxDelta = id === 'UNIT-C1' ? 0.006 : 0.003
+          teams[id] = {
+            ...teams[id],
+            location: {
+              lat: teams[id].location.lat + (Math.random() * 2 - 1) * maxDelta,
+              lon: teams[id].location.lon + (Math.random() * 2 - 1) * maxDelta,
+            },
+          }
+        })
+        return { ...prev, teams }
+      })
+    }, 8000)
+    return () => window.clearInterval(t)
+  }, [])
+
+  const wsLive = status.wsState === 'connected'
+  const unitCount = Object.keys(mapState.teams).length
+  const activeUnits = Object.values(mapState.teams).filter((t) => t.status === 'active').length
+  const highRiskZones = useMemo(
+    () => mapState.riskCells.filter((c) => c.probability >= 0.7).length,
+    [mapState.riskCells],
+  )
+  const criticalCount = pending.filter((e) => e.priority === 'CRITICAL').length
 
   return (
-    <main className="dashboard-module" aria-label="DisasterMind commander dashboard">
-      <style>{`
-        .auto-exec-banner {
-          position: fixed;
-          top: -100px;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 90%;
-          max-width: 800px;
-          background: #00e676;
-          color: #05080c;
-          padding: 14px 24px;
-          border-radius: 0 0 8px 8px;
-          box-shadow: 0 4px 20px rgba(0, 230, 118, 0.4);
-          z-index: 1000;
-          transition: top 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-          font-family: var(--font-heading);
-          text-align: center;
-        }
-        .auto-exec-banner.visible {
-          top: 0;
-        }
-        .banner-content {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 2px;
-        }
-        .banner-content strong {
-          font-size: 13px;
-          letter-spacing: 0.5px;
-        }
-        .banner-content span {
-          font-size: 11px;
-          opacity: 0.9;
-          font-weight: 600;
-        }
-        @keyframes pulse-green-dot-anim {
-          0% { opacity: 0.3; transform: scale(0.8); }
-          100% { opacity: 1; transform: scale(1.2); }
-        }
-        .pulsing-green-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background-color: #00e676;
-          box-shadow: 0 0 6px #00e676;
-          animation: pulse-green-dot-anim 0.8s infinite alternate;
-          display: inline-block;
-          margin-right: 6px;
-        }
-        .demo-btn {
-          margin-left: 12px;
-          background: rgba(0, 230, 118, 0.1);
-          border: 1px solid rgba(0, 230, 118, 0.4);
-          color: #00e676;
-          padding: 2px 8px;
-          border-radius: 3px;
-          cursor: pointer;
-          font: 700 10px var(--font-mono);
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          transition: all 0.2s;
-        }
-        .demo-btn:hover {
-          background: rgba(0, 230, 118, 0.2);
-          border-color: #00e676;
-        }
-      `}</style>
-
-      {/* Auto-Execution banner */}
-      <div className={`auto-exec-banner ${showAutoExecBanner ? 'visible' : ''}`}>
-        <div className="banner-content">
-          <strong>EVACUATION ORDER ISSUED — COMMANDER-AI AUTO-EXECUTED AFTER 120s WINDOW</strong>
-          <span>84,000 RESIDENTS NOTIFIED VIA SMS/BROADCAST</span>
-        </div>
-      </div>
-
-      <div className="dashboard-status-bar" aria-label="Group A backend status">
-        <span className={status.backendOnline ? 'status-online' : 'status-offline'}>
-          ● {status.backendOnline ? 'GROUP A CONNECTED' : 'GROUP A OFFLINE'}
-        </span>
-        <span className="status-separator">|</span>
-        <span>{connectionState === 'connected' ? 'WS LIVE' : connectionState === 'connecting' ? 'WS CONNECTING...' : 'WS RECONNECTING...'}</span>
-        <span className="status-separator">|</span>
-        <span>LAST MSG {lastMessageTime}</span>
-        <span className="status-separator">|</span>
-        <BackendStatusBadge
-          connectionState={backendWSState}
-          lastMessageTime={backendWSLastMsgAt}
-        />
-        <button
-          type="button"
-          onClick={() => setShowReport(true)}
-          style={{
-            marginLeft: '12px',
-            padding: '4px 14px',
-            fontSize: '11px',
-            fontWeight: 600,
-            background: '#6366f1',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            letterSpacing: '0.03em',
-          }}
-        >
-          Generate Report
-        </button>
-        {!status.backendOnline && (
-          <>
-            <span className="status-separator">|</span>
-            <span className="status-fallback">Fallback: SIMULATION MODE ACTIVE</span>
-            <button
-              type="button"
-              onClick={handleStartDemo}
-              className="demo-btn"
-            >
-              {demoStatus === 'idle' && '▶ START DEMO'}
-              {demoStatus === 'running' && (
-                <>
-                  <span className="pulsing-green-dot" />
-                  DEMO RUNNING
-                </>
-              )}
-              {demoStatus === 'completed' && '↺ RESTART DEMO'}
-            </button>
-          </>
-        )}
-      </div>
-      <AlertTicker />
-      <section className="dashboard-grid">
-        <aside className="side-column left-column">
-          <ResourcePanel boatsAdjustment={boatsAdjustment} />
-          <AgentFeed
-            connectionState={connectionState}
-            incomingMessage={latestMessage}
-            customEntry={customFeedEntry}
-            onOverride={submitOverride}
-          />
-        </aside>
-        <section className="center-column" aria-label="Operational map">
-          <div style={{ position: 'relative', height: '100%' }}>
-            <LiveMap mapState={mapState} liveShelters={liveShelters} />
-            <MapLegend />
+    <div className="dm-scroll h-full overflow-y-auto bg-surface p-gutter md:p-margin-desktop">
+      <div className="mx-auto flex h-full max-w-[1440px] flex-col gap-6">
+        {/* Header */}
+        <div className="flex shrink-0 flex-col justify-between gap-3 md:flex-row md:items-end">
+          <div>
+            <h1 className="text-headline-lg text-primary">Commander Dashboard</h1>
+            <p className="mt-1 text-body-md text-on-surface-variant">
+              Sector 7 Command · Cyclone Remal Response · Odisha Coast
+            </p>
           </div>
-        </section>
-        <aside className="side-column right-column">
-          <EscalationQueue
-            backendOnline={status.backendOnline}
-            incomingMessage={latestMessage}
-            timelineEscalations={timelineEscalations}
-            onApproveZone7={handleApproveZone7}
-            zone7OverrideState={zone7OverrideState}
+          <Badge variant={status.backendOnline ? 'success' : 'warning'} className="self-start md:self-auto">
+            <span
+              className={cn(
+                'h-2 w-2 rounded-full',
+                status.backendOnline ? 'animate-pulse bg-success' : 'bg-on-tertiary-container',
+              )}
+            />
+            {status.backendOnline ? 'Group A Backend Live' : 'Simulation Mode'}
+          </Badge>
+        </div>
+
+        {/* KPI row */}
+        <div className="grid shrink-0 grid-cols-1 gap-6 md:grid-cols-3">
+          <KpiCard
+            label="Active Incidents"
+            value={highRiskZones}
+            icon="local_fire_department"
+            hintIcon="arrow_upward"
+            hint={`${mapState.riskCells.length} risk zones tracked`}
           />
-          {/* Override Log */}
-          <section className="panel" style={{ display: 'flex', flexDirection: 'column' }}>
-            <button
-              onClick={() => setOverrideLogOpen(o => !o)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                width: '100%',
-                padding: '8px 12px',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: '#94a3b8',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', color: '#475569' }}>
-                  OVERRIDE LOG
-                </span>
-                <span style={{
-                  fontSize: '9px',
-                  fontWeight: 700,
-                  color: overrides.length > 0 ? '#f59e0b' : '#475569',
-                }}>
-                  [{overrides.length} {overrides.length === 1 ? 'entry' : 'entries'}]
-                </span>
-              </div>
-              <span style={{ fontSize: '12px', transform: overrideLogOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                ▾
-              </span>
-            </button>
-            {overrideLogOpen && (
-              <div style={{ padding: '0 12px 8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {overrides.length === 0 ? (
-                  <div style={{ fontSize: '10px', color: '#475569', fontStyle: 'italic', padding: '4px 0' }}>
-                    No overrides logged this session
-                  </div>
-                ) : (
-                  overrides.map(rec => (
-                    <div
-                      key={rec.id}
-                      style={{
-                        fontSize: '10px',
-                        color: '#cbd5e1',
-                        borderTop: '1px solid rgba(255,255,255,0.04)',
-                        padding: '6px 0',
-                        lineHeight: 1.6,
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
-                        <span style={{ color: '#64748b', fontSize: '9px' }}>
-                          {rec.id}  {rec.agentType}
-                        </span>
-                        <span style={{ color: '#475569', fontSize: '9px' }}>{rec.commanderId}</span>
-                        <span style={{ color: '#475569', fontSize: '9px', marginLeft: 'auto' }}>
-                          {new Date(rec.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
-                        </span>
-                      </div>
-                      <div style={{ color: '#f59e0b', fontSize: '10px', fontStyle: 'italic', marginBottom: '2px' }}>
-                        "{rec.overrideReason}"
-                      </div>
-                      <div style={{ color: '#475569', fontSize: '9px' }}>
-                        Propagated to: {rec.propagatedTo.join(' · ')}
-                      </div>
-                    </div>
-                  ))
+          <KpiCard
+            label="Units Deployed"
+            value={unitCount}
+            icon="groups"
+            hintIcon="check_circle"
+            hint={`${activeUnits} active · ${unitCount - activeUnits} staged`}
+          />
+          <KpiCard
+            label="Critical Escalations"
+            value={criticalCount}
+            icon="warning"
+            hintIcon="priority_high"
+            hint="Requires immediate review"
+            tone="critical"
+          />
+        </div>
+
+        {/* Map + queue */}
+        <div className="grid min-h-[460px] flex-1 grid-cols-1 gap-6 lg:grid-cols-12">
+          <Card className="flex flex-col overflow-hidden p-0 lg:col-span-8">
+            <CardHeader>
+              <CardTitle>Live Operations Map</CardTitle>
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded border px-2 py-1 text-label-sm uppercase',
+                  wsLive
+                    ? 'border-error/30 bg-surface text-error'
+                    : 'border-outline-variant/40 bg-surface text-on-surface-variant',
                 )}
-              </div>
-            )}
-          </section>
+              >
+                <span className={cn('h-2 w-2 rounded-full', wsLive ? 'animate-pulse bg-error' : 'bg-outline')} />
+                {wsLive ? 'Live' : status.wsState === 'connecting' ? 'Connecting' : 'Reconnecting'}
+              </span>
+            </CardHeader>
+            <div className="relative flex-1">
+              <LiveMap mapState={mapState} className="absolute inset-0" />
+            </div>
+          </Card>
 
-          <BriefingPanel
-            context={briefingContext}
-          />
-        </aside>
-      </section>
+          <Card className="flex flex-col overflow-hidden p-0 lg:col-span-4">
+            <CardHeader>
+              <CardTitle>Escalation Queue</CardTitle>
+              <Badge variant="solid">{criticalCount} Critical</Badge>
+            </CardHeader>
+            <div className="dm-scroll flex flex-1 flex-col gap-2 overflow-y-auto p-3">
+              {pending.length === 0 ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center text-on-surface-variant">
+                  <Icon name="task_alt" className="text-[32px] text-success" />
+                  <p className="text-body-sm">Queue clear — no pending escalations</p>
+                </div>
+              ) : (
+                pending.map((item) => (
+                  <QueueItem
+                    key={item.id}
+                    item={item}
+                    now={now}
+                    onDispatch={approve}
+                    onAcknowledge={(id) => overrideItem(id, 'Acknowledged — manual handling')}
+                  />
+                ))
+              )}
+            </div>
+          </Card>
+        </div>
 
-      {/* Post-Incident Report Modal */}
-      {showReport && (
-        <PostIncidentReport
-          auditLog={auditLog}
-          onClose={() => setShowReport(false)}
-        />
-      )}
-    </main>
+        {/* Deployments */}
+        <Card className="shrink-0 overflow-hidden p-0">
+          <CardHeader>
+            <CardTitle>Active Deployments Overview</CardTitle>
+            <span className="font-mono text-data-mono tabular-nums text-on-surface-variant">
+              {escalations.length} events · {unitCount} units
+            </span>
+          </CardHeader>
+          <DeploymentsTable teams={mapState.teams} />
+        </Card>
+      </div>
+    </div>
   )
 }

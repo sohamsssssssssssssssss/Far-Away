@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
+import { useIsMobile } from './hooks/useIsMobile'
 import { Dashboard } from './modules/dashboard/Dashboard'
 import { Escalation } from './modules/escalation/Escalation'
 import { Field } from './modules/field/Field'
 import { Report } from './modules/report/Report'
 import { SplashScreen } from './shell/SplashScreen'
-import { TopNav, type UnifiedModuleKey } from './shell/TopNav'
+import { CommandShell } from './shell/CommandShell'
+import type { UnifiedModuleKey } from './shell/TopNav'
 import { OfflineBanner } from './components/OfflineBanner'
 
 function App() {
-  const isMobile = window.innerWidth <= 430 || /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  const isMobile = useIsMobile()
   const [activeModule, setActiveModule] = useState<UnifiedModuleKey>(isMobile ? 'field' : 'dashboard')
   const [bootState, setBootState] = useState<'splash' | 'transition' | 'ready'>('splash')
 
@@ -17,25 +19,38 @@ function App() {
       setBootState('transition')
       window.setTimeout(() => setBootState('ready'), 260)
     }, 2000)
-
     return () => window.clearTimeout(splashTimer)
   }, [])
 
+  // Opt the document into the light "tactical sand" surface.
+  useEffect(() => {
+    document.body.classList.add('dm-light')
+    return () => document.body.classList.remove('dm-light')
+  }, [])
+
+  // The field interface is a self-contained full-screen mobile app.
+  if (isMobile) {
+    return (
+      <>
+        <Field />
+        <SplashScreen visible={bootState !== 'ready'} />
+        <OfflineBanner />
+      </>
+    )
+  }
+
   return (
-    <div className="app-root">
-      <div className={`app-shell ${bootState !== 'ready' ? 'booting' : ''}`}>
-        <TopNav activeModule={activeModule} onChange={setActiveModule} />
-        <main className="module-host">
-          {activeModule === 'dashboard' && <Dashboard />}
-          {activeModule === 'escalation' && <Escalation />}
-          {activeModule === 'field' && <Field />}
-          {activeModule === 'report' && <Report />}
-        </main>
-      </div>
+    <>
+      <CommandShell activeModule={activeModule} onChange={setActiveModule}>
+        {activeModule === 'dashboard' && <Dashboard />}
+        {activeModule === 'escalation' && <Escalation />}
+        {activeModule === 'report' && <Report />}
+        {activeModule === 'field' && <Field />}
+      </CommandShell>
 
       <SplashScreen visible={bootState !== 'ready'} />
       <OfflineBanner />
-    </div>
+    </>
   )
 }
 

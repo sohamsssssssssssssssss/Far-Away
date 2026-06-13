@@ -262,12 +262,20 @@ export function LiveMap({ mapState, liveShelters, className }: LiveMapProps) {
       map.on('mouseenter', 'imd-alert-fill', () => { map.getCanvas().style.cursor = 'pointer' })
       map.on('mouseleave', 'imd-alert-fill', () => { map.getCanvas().style.cursor = '' })
 
+      map.resize()
       setMapReady(true)
     })
 
     mapRef.current = map
 
+    // Keep the canvas sized to its container. The map often initialises while
+    // the boot animation is still settling the layout, so without this the
+    // canvas locks to a too-small height and leaves a black void below it.
+    const ro = new ResizeObserver(() => map.resize())
+    ro.observe(containerRef.current)
+
     return () => {
+      ro.disconnect()
       map.remove()
       mapRef.current = null
       markersRef.current = {}
