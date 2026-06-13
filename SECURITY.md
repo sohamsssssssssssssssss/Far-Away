@@ -177,7 +177,11 @@ rollout:
    protected (hash chain), confidentiality and durability are deployment
    responsibilities.
 10. **Ingestion input is trusted-ish.** Feed payloads are parsed defensively but
-    there is no signature verification of upstream providers.
+    there is no signature verification of upstream providers. The data-plane
+    attack surface (spoofed feeds, sensor/social manipulation, suppression,
+    replay) is modelled in full in [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md),
+    along with the structural mitigation (no consequential action is autonomous)
+    and the prioritised hardening steps.
 
 ---
 
