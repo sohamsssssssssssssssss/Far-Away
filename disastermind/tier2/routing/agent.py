@@ -37,7 +37,6 @@ Priority order for whom we route first (PRD Step 5):
 from __future__ import annotations
 
 import logging
-from dataclasses import asdict
 from typing import Any
 
 from ...audit.decision_log import DecisionLogger
@@ -50,6 +49,13 @@ from ...models.domain import (
     Shelter,
 )
 from ...models.geo import LatLon, haversine
+from ._coerce import (
+    _as_cascade_failure,
+    _as_latlon,
+    _as_shelter,
+    _evacroute_to_dict,
+)
+from ._geo import _point_near_segment, _segment_point
 
 log = logging.getLogger("disastermind.routing")
 
@@ -758,110 +764,3 @@ class EvacuationRoutingAgent(BaseAgent):
             incident_id=incident_id,
             module=self.module,
         )
-
-
-# ============================================================ module-level helpers
-def _evacroute_to_dict(route: EvacRoute) -> dict[str, Any]:
-    """asdict-based serialisation (LatLon dataclasses become nested dicts)."""
-    return asdict(route)
-
-
-def _as_latlon(value: Any) -> LatLon | None:
-    if value is None:
-        return None
-    if isinstance(value, LatLon):
-        return value
-    if isinstance(value, dict):
-        try:
-            return LatLon(float(value["lat"]), float(value["lon"]))
-        except (KeyError, TypeError, ValueError):
-            return None
-    if isinstance(value, (list, tuple)) and len(value) == 2:
-        try:
-            return LatLon(float(value[0]), float(value[1]))
-        except (TypeError, ValueError):
-            return None
-    return None
-
-
-def _as_shelter(value: Any) -> Shelter | None:
-    if value is None:
-        return None
-    if isinstance(value, Shelter):
-        return value
-    if isinstance(value, dict):
-        loc = _as_latlon(value.get("location"))
-        if loc is None:
-            return None
-        try:
-            return Shelter(
-                shelter_id=str(value.get("shelter_id", "shelter")),
-                location=loc,
-                capacity=int(value.get("capacity", 0) or 0),
-                occupancy=int(value.get("occupancy", 0) or 0),
-            )
-        except (TypeError, ValueError):
-            return None
-    return None
-
-
-def _as_cascade_failure(value: Any) -> CascadeFailure | None:
-    if value is None:
-        return None
-    if isinstance(value, CascadeFailure):
-        return value
-    if isinstance(value, dict):
-        try:
-            return CascadeFailure(
-                segment_id=str(value.get("segment_id", "seg")),
-                fails_at_minute=int(value.get("fails_at_minute", 0) or 0),
-                reason=str(value.get("reason", "inundation")),
-                viable_until_minute=int(value.get("viable_until_minute", 0) or 0),
-            )
-        except (TypeError, ValueError):
-            return None
-    return None
-
-
-def _segment_point(segment_id: str) -> LatLon | None:
-    """Best-effort decode of a hazard location from a segment id.
-
-    Convention: a segment id may embed coordinates as ``...lat,lon`` or
-    ``lat:lon``; otherwise we cannot localise it and return None (the segment is
-    still avoided by id elsewhere, just not geometrically).
-    """
-    if not segment_id:
-        return None
-    for sep in (",", ":"):
-        if sep in segment_id:
-            tail = segment_id.replace(":", ",").split(",")
-            nums: list[float] = []
-            for tok in tail:
-                try:
-                    nums.append(float(tok))
-                except ValueError:
-                    continue
-            if len(nums) >= 2:
-                return LatLon(nums[-2], nums[-1])
-    return None
-
-
-def _point_near_segment(p: LatLon, a: LatLon, b: LatLon) -> float:
-    """Approx distance (m) from point ``p`` to leg ``a->b`` (planar projection)."""
-    import math
-
-    # Equirectangular metres relative to a.
-    m_lat = 111_320.0
-    m_lon = 111_320.0 * math.cos(math.radians(a.lat))
-    ax, ay = 0.0, 0.0
-    bx = (b.lon - a.lon) * m_lon
-    by = (b.lat - a.lat) * m_lat
-    px = (p.lon - a.lon) * m_lon
-    py = (p.lat - a.lat) * m_lat
-    dx, dy = bx - ax, by - ay
-    seg_len2 = dx * dx + dy * dy
-    if seg_len2 == 0.0:
-        return math.hypot(px - ax, py - ay)
-    t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / seg_len2))
-    cx, cy = ax + t * dx, ay + t * dy
-    return math.hypot(px - cx, py - cy)
