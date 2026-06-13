@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { config } from '../lib/config'
 
 export type WSConnectionState = 'connecting' | 'live' | 'reconnecting' | 'offline'
 
@@ -18,7 +19,7 @@ export interface BackendWSMessage {
   payload: Record<string, unknown>
 }
 
-const WS_URL = 'wss://far-away-production.up.railway.app/ws'
+const WS_URL = config.api.wsUrl
 
 export function useBackendWS(onMessage: (msg: BackendWSMessage) => void) {
   const [connectionState, setConnectionState] = useState<WSConnectionState>('connecting')

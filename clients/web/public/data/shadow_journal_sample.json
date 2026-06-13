@@ -1,0 +1,132 @@
+{
+  "_note": "ILLUSTRATIVE SAMPLE \u2014 no live shadow season has run yet. Hashes are real (SHA-256 chained) so the viewer can verify chain integrity.",
+  "genesis": "GENESIS",
+  "records": [
+    {
+      "kind": "prediction",
+      "payload": {
+        "prediction_id": "FANI-PURI",
+        "issued_at": "2019-04-30T06:00:00Z",
+        "window_end": "2019-05-03T12:00:00Z",
+        "hazard": "cyclone",
+        "probability": 0.91,
+        "threshold": 0.5
+      },
+      "hash": "d7a9dbee8e6164af66a631563dc245dd84cbf635effdd47d0ab1c985da57563e"
+    },
+    {
+      "kind": "outcome",
+      "payload": {
+        "prediction_id": "FANI-PURI",
+        "observed_at": "2019-05-03T12:00:00Z",
+        "occurred": true
+      },
+      "hash": "c513bf845a57013d082a0fd95ef6c63bbc14ae3582b8af4685e066130ed8bcca"
+    },
+    {
+      "kind": "prediction",
+      "payload": {
+        "prediction_id": "BULBUL-SUNDARBANS",
+        "issued_at": "2019-11-08T00:00:00Z",
+        "window_end": "2019-11-10T00:00:00Z",
+        "hazard": "cyclone",
+        "probability": 0.74,
+        "threshold": 0.5
+      },
+      "hash": "69c440a0d435c3aabaa82589fd5b79c521443688c1b7ff4544eaf5e24fad5a99"
+    },
+    {
+      "kind": "outcome",
+      "payload": {
+        "prediction_id": "BULBUL-SUNDARBANS",
+        "observed_at": "2019-11-10T00:00:00Z",
+        "occurred": true
+      },
+      "hash": "abf2a963642c9ef353f777438babec938f751df6ee907b7ebd9cae199d835d49"
+    },
+    {
+      "kind": "prediction",
+      "payload": {
+        "prediction_id": "MAHA-GUJARAT",
+        "issued_at": "2019-11-05T00:00:00Z",
+        "window_end": "2019-11-07T00:00:00Z",
+        "hazard": "cyclone",
+        "probability": 0.62,
+        "threshold": 0.5
+      },
+      "hash": "dcb771dd5b690cd8ae4cf59b7f4024550d6187eacd8de8c1dea7f00e567edd58"
+    },
+    {
+      "kind": "outcome",
+      "payload": {
+        "prediction_id": "MAHA-GUJARAT",
+        "observed_at": "2019-11-07T00:00:00Z",
+        "occurred": false
+      },
+      "hash": "9c44e46830f09751d8607c510a56f03307df020d6f72850c5cd72b0b9bdaa4e8"
+    },
+    {
+      "kind": "prediction",
+      "payload": {
+        "prediction_id": "AMPHAN-KOLKATA",
+        "issued_at": "2020-05-18T06:00:00Z",
+        "window_end": "2020-05-20T18:00:00Z",
+        "hazard": "cyclone",
+        "probability": 0.88,
+        "threshold": 0.5
+      },
+      "hash": "4159227c91343c367a0b5e0a40390af46e26021721c94dd6c4b194fdbbbcadf2"
+    },
+    {
+      "kind": "outcome",
+      "payload": {
+        "prediction_id": "AMPHAN-KOLKATA",
+        "observed_at": "2020-05-20T18:00:00Z",
+        "occurred": true
+      },
+      "hash": "322f3916139824cafef3e0b305fa017bd4084acfb8b17d46ba51627d2ccfc290"
+    },
+    {
+      "kind": "prediction",
+      "payload": {
+        "prediction_id": "NIVAR-TN",
+        "issued_at": "2020-11-24T00:00:00Z",
+        "window_end": "2020-11-26T00:00:00Z",
+        "hazard": "cyclone",
+        "probability": 0.69,
+        "threshold": 0.5
+      },
+      "hash": "8bc6f9285eb5bfabcf13743d51bc44c148299be601864de4cbe19fb0d7312a0c"
+    },
+    {
+      "kind": "outcome",
+      "payload": {
+        "prediction_id": "NIVAR-TN",
+        "observed_at": "2020-11-26T00:00:00Z",
+        "occurred": true
+      },
+      "hash": "470f8dc69a68f26471099f7dac78ed3a7b382892aa44e99978e57a0d47840f38"
+    },
+    {
+      "kind": "prediction",
+      "payload": {
+        "prediction_id": "BUREVI-KERALA",
+        "issued_at": "2020-12-02T00:00:00Z",
+        "window_end": "2020-12-04T00:00:00Z",
+        "hazard": "cyclone",
+        "probability": 0.41,
+        "threshold": 0.5
+      },
+      "hash": "93bc4001fe8a35520e74578a5280d5934bb8f19d02b878de6e502d407d81f078"
+    },
+    {
+      "kind": "outcome",
+      "payload": {
+        "prediction_id": "BUREVI-KERALA",
+        "observed_at": "2020-12-04T00:00:00Z",
+        "occurred": false
+      },
+      "hash": "ec4160d2a6cfd57bdc849f4e14d961cd116a5dc8028475b770d620cc5dccead6"
+    }
+  ]
+}

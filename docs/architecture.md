@@ -1,10 +1,12 @@
 # DisasterMind — System Architecture
 
 DisasterMind is a multi-agent system that detects a disaster, predicts its
-evolution, optimises the response, and issues field and public orders
-**autonomously**, escalating to a human commander only when a decision crosses a
-defined authority threshold. It is India-focused (IMD / CWC / NCS / ISRO Bhuvan
-feeds) and spans three hazard modules.
+evolution, optimises the response, and drives a **bounded-authority** command
+pipeline to dispatch. Routine field tasking dispatches without sign-off; every
+consequential action (mass evacuation, cross-jurisdiction resources, military
+assets, emergency declarations) escalates to a human commander, and the
+highest-consequence actions are human-only. It is India-focused (IMD / CWC /
+NCS / ISRO Bhuvan feeds) and spans three hazard modules.
 
 > Sources of truth for this document: `README.md`,
 > `disastermind/core/contracts.py`, the per-module `build.py` factories, the

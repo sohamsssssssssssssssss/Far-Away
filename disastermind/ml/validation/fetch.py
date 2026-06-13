@@ -47,7 +47,7 @@ FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")
 
 FLOOD_FIXTURE = os.path.join(FIXTURES, "openmeteo_glofas_india_2010_2023.json")
 FIRE_FIXTURE = os.path.join(FIXTURES, "fpafod_era5_fire_2012_2018.json")
-FIRE_INDIA_FIXTURE = os.path.join(FIXTURES, "firms_era5_fire_india_2019_2023.json")
+FIRE_INDIA_FIXTURE = os.path.join(FIXTURES, "firms_era5_fire_india_2015_2024.json")
 QUAKE_FIXTURE = os.path.join(FIXTURES, "usgs_catalog_2013_2017.json")
 #: Survey-grade external outcome catalog (GDACS UN/EC declared disaster events).
 GDACS_FIXTURE = os.path.join(FIXTURES, "gdacs_india_disasters_2010_2023.json")
@@ -466,7 +466,7 @@ def fetch_gdacs(out_path: str = GDACS_FIXTURE) -> dict:
 # --------------------------------------------------------------- fire (INDIA, FIRMS)
 #: Fire window for India (VIIRS-SNPP coverage is solid 2012+; use a 5-year span
 #: with a clean temporal split: train 2019-2021, test 2022-2023).
-FIRE_IN_START, FIRE_IN_END = "2019-01-01", "2023-12-31"
+FIRE_IN_START, FIRE_IN_END = "2015-01-01", "2024-12-31"
 _FIRMS_VIIRS = "https://firms.modaps.eosdis.nasa.gov/data/country/viirs-snpp/{year}/viirs-snpp_{year}_India.csv"
 
 #: 10 real fire-prone Indian cells across the dry-deciduous forest belt + the
@@ -514,8 +514,14 @@ def fetch_fire_india(out_path: str = FIRE_INDIA_FIXTURE) -> dict:
 
     # download all VIIRS-India detections for the window once, then bin per cell
     all_det: list[dict] = []
+    years_ok: list[int] = []
     for year in range(int(FIRE_IN_START[:4]), int(FIRE_IN_END[:4]) + 1):
-        text = _get_text(_FIRMS_VIIRS.format(year=year))
+        try:
+            text = _get_text(_FIRMS_VIIRS.format(year=year))
+        except Exception as exc:  # a not-yet-archived recent year must not kill the run
+            print(f"fire-india: VIIRS {year}: SKIPPED ({type(exc).__name__})", file=sys.stderr)
+            continue
+        years_ok.append(year)
         rdr = _csv.DictReader(_io.StringIO(text))
         kept = 0
         for row in rdr:

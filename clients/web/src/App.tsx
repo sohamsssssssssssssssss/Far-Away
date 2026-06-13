@@ -4,6 +4,7 @@ import { Dashboard } from './modules/dashboard/Dashboard'
 import { Escalation } from './modules/escalation/Escalation'
 import { Field } from './modules/field/Field'
 import { Report } from './modules/report/Report'
+import { Evidence } from './modules/evidence/Evidence'
 import { SplashScreen } from './shell/SplashScreen'
 import { CommandShell } from './shell/CommandShell'
 import type { UnifiedModuleKey } from './shell/TopNav'
@@ -45,6 +46,7 @@ function App() {
         {activeModule === 'dashboard' && <Dashboard />}
         {activeModule === 'escalation' && <Escalation />}
         {activeModule === 'report' && <Report />}
+        {activeModule === 'evidence' && <Evidence />}
         {activeModule === 'field' && <Field />}
       </CommandShell>
 

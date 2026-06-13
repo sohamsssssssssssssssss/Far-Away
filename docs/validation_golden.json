@@ -1,0 +1,23 @@
+{
+  "_about": "Golden snapshot of the headline validation metrics. `make reproduce` re-runs the full validation suite offline against the committed real-data fixtures and asserts every number below regenerates within tolerance. The suite is deterministic (stdlib logistic fit, fixed seed, no network), so a clean checkout must reproduce these exactly. These are the same figures published in PROJECT_OVERVIEW.md section 5.",
+  "tolerance": { "auc": 0.003, "brier": 0.003, "ece": 0.003 },
+  "generated_by": "python -m disastermind.ml.validation --json",
+  "hazards": {
+    "earthquake": {
+      "source": "USGS FDSN catalog 2013-2017 (M4.5+), temporal split",
+      "auc": 0.9372, "brier": 0.0107, "ece": 0.002
+    },
+    "flood": {
+      "source": "GloFAS-ERA5, 12 Indian basins 2010-2023, temporal split",
+      "auc": 0.9437, "brier": 0.0278, "ece": 0.0037
+    },
+    "fire": {
+      "source": "USDA FPA-FOD + ERA5, Pacific NW 2012-2018, temporal split",
+      "auc": 0.8374, "brier": 0.1205, "ece": 0.0227
+    },
+    "fire-india": {
+      "source": "NASA FIRMS VIIRS + ERA5, India, train 2015-2021 / test 2022-2024",
+      "auc": 0.8538, "brier": 0.1526, "ece": 0.0151
+    }
+  }
+}

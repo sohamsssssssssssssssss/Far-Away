@@ -1,7 +1,7 @@
-import { AlertTriangle, FileText, Monitor, Smartphone } from 'lucide-react'
+import { AlertTriangle, FileText, Monitor, ShieldCheck, Smartphone } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-export type UnifiedModuleKey = 'dashboard' | 'escalation' | 'field' | 'report'
+export type UnifiedModuleKey = 'dashboard' | 'escalation' | 'field' | 'report' | 'evidence'
 
 type TopNavProps = {
   activeModule: UnifiedModuleKey
@@ -17,6 +17,7 @@ const modules: Array<{
   { id: 'escalation', shortLabel: 'ESCALATION', Icon: AlertTriangle },
   { id: 'field', shortLabel: 'FIELD OPS', Icon: Smartphone },
   { id: 'report', shortLabel: 'INCIDENT REPORT', Icon: FileText },
+  { id: 'evidence', shortLabel: 'EVIDENCE', Icon: ShieldCheck },
 ]
 
 const currentModuleName: Record<UnifiedModuleKey, string> = {
@@ -24,6 +25,7 @@ const currentModuleName: Record<UnifiedModuleKey, string> = {
   escalation: 'ESCALATION MEMO GENERATOR',
   field: 'FIELD TEAM INTERFACE',
   report: 'POST-INCIDENT REPORT',
+  evidence: 'VALIDATION & EVIDENCE',
 }
 
 const formatClock = (date: Date) =>

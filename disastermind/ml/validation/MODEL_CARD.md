@@ -187,68 +187,61 @@ _real data only; leak-free features; temporal + blocked-spatial validation; thre
 
 ## Fire-India
 
-- **Source:** NASA FIRMS (VIIRS-SNPP) active-fire detections + ERA5 fire weather, 10 Indian fire-belt cells, 2019 daily (real outcomes)
+- **Source:** NASA FIRMS (VIIRS-SNPP) active-fire detections + ERA5 fire weather, 10 Indian fire-belt cells, 2015-2024 daily (~239k in-cell detections, real)
 - **Label:** >=1 FIRMS active-fire detection in the cell on day t+1
-- **Split:** intra-year temporal: train Jan-Apr 2019, test May-Dec 2019 (single year; multi-year pending a reliable FIRMS bulk pull)
-- **Train:** 900 rows (base rate 70.11%) · **Test:** 2420 rows (base rate 26.69%)
+- **Split:** temporal: train 2015-2021 fire seasons, test 2022-2024 (three held-out seasons, out-of-sample; no cross-year leakage)
+- **Train:** 25270 rows (base rate 40.68%) · **Test:** 10930 rows (base rate 42.56%)
 
-**Headline (calibrated, out-of-sample):** AUC 0.6838 · Brier 0.1657 · ECE 0.0427
+**Headline (calibrated, out-of-sample):** AUC 0.8538 · Brier 0.1526 · ECE 0.0151
 
 ### vs operational baselines (paired bootstrap on AUC)
 | Baseline | Baseline AUC | Model AUC | dAUC [95% CI] | p | significant |
 |---|---|---|---|---|---|
-| angstrom_index | 0.7837 | 0.7980 | +0.0148 [+0.0004, +0.0296] | 0.0199 | YES |
+| angstrom_index | 0.7965 | 0.8549 | +0.0585 [+0.0520, +0.0646] | 0.0040 | YES |
 
 ### At the operating point (threshold chosen on calibration split)
-- Target POD 90% -> threshold 0.615
-- On test: POD 19.66%, FAR 23.03%, CSI 0.186, bias 0.26 (tp=127, fp=38, fn=519)
-- Cost model (miss:false-alarm = 100:1): test cost 1774 at the cost-optimal threshold
+- Target POD 90% -> threshold 0.278
+- On test: POD 91.75%, FAR 37.12%, CSI 0.595, bias 1.46 (tp=4268, fp=2519, fn=384)
+- Cost model (miss:false-alarm = 100:1): test cost 6235 at the cost-optimal threshold
 
 ### Calibration + conformal coverage
-- ECE raw 0.1888 -> calibrated 0.0427 (isotonic, fit on calibration split)
-- Conformal: target coverage 90%, empirical 78.39%, singleton rate 95.29%
+- ECE raw 0.0584 -> calibrated 0.0151 (isotonic, fit on calibration split)
+- Conformal: target coverage 90%, empirical 90.11%, singleton rate 66.83%
 
 ### Blocked generalisation
-- Leave-one-region-out: worst AUC 0.7215, mean 0.8519 over 5 regions
-- Rolling origin: worst AUC None, mean None over 0 years
+- Leave-one-region-out: worst AUC 0.7987, mean 0.8594 over 5 regions
+- Rolling origin: worst AUC 0.8058, mean 0.8502 over 8 years
 
 ### Fairness audit (shared threshold)
-- **region**: FLAGGED (under-protected: region:east, region:himalaya, region:northeast)
-  - remediation (per-group thresholds, fit on calibration): still flagged: region:east, region:northeast, region:south — cost of equity: region:east +-27% FAR, region:himalaya +61% FAR, region:northeast +0% FAR
-    - _region:east: discrimination deficit — needs better inputs/features (threshold cannot fix)_
-    - _region:northeast: discrimination deficit — needs better inputs/features (threshold cannot fix)_
-    - _region:south: discrimination deficit — needs better inputs/features (threshold cannot fix)_
-- **state**: FLAGGED (under-protected: state:HP, state:JH, state:MZ, state:OD, state:UK)
-  - remediation (per-group thresholds, fit on calibration): still flagged: state:HP, state:JH, state:MZ, state:OD, state:UK — cost of equity: state:HP +0% FAR, state:JH +0% FAR, state:MZ +0% FAR, state:OD +0% FAR, state:UK +0% FAR
-    - _state:HP: discrimination deficit — needs better inputs/features (threshold cannot fix)_
-    - _state:JH: discrimination deficit — needs better inputs/features (threshold cannot fix)_
-    - _state:MZ: discrimination deficit — needs better inputs/features (threshold cannot fix)_
-    - _state:OD: discrimination deficit — needs better inputs/features (threshold cannot fix)_
-    - _state:UK: discrimination deficit — needs better inputs/features (threshold cannot fix)_
+- **region**: FLAGGED (under-protected: region:east)
+  - remediation (per-group thresholds, fit on calibration): PASS — cost of equity: region:east +14% FAR
+- **state**: FLAGGED (under-protected: state:JH)
+  - remediation (per-group thresholds, fit on calibration): still flagged: state:CG — cost of equity: state:JH +14% FAR
+    - _state:CG: residual threshold gap (consider a lower group threshold / more data)_
 
 ### Rare-severe tail
-- FRP >=50 next day: 3 events, POD 0.00% [0.00%, 0.00%]
-- FRP >=100 next day: 1 events, POD 0.00% [0.00%, 0.00%]
+- FRP >=50 next day: 161 events, POD 100.00% [100.00%, 100.00%]
+- FRP >=100 next day: 79 events, POD 100.00% [100.00%, 100.00%]
 
 ### Lead time vs POD (actionable warning)
-- Actionable lead time at POD 80%: **None h**
+- Actionable lead time at POD 80%: **72 h**
 | Lead (h) | POD | FAR | AUC | events |
 |---|---|---|---|---|
-| 24 | 33.44% | 28.48% | 0.8025 | 646 |
-| 48 | 28.04% | 27.49% | 0.794 | 649 |
-| 72 | 21.51% | 29.29% | 0.7872 | 651 |
+| 24 | 91.32% | 37.02% | 0.8527 | 4652 |
+| 48 | 91.12% | 38.01% | 0.8428 | 4649 |
+| 72 | 91.30% | 38.84% | 0.8358 | 4646 |
 
 ### Degraded-input robustness (fixed model, sensors failing)
 - Graceful until POD 70%: **75%** of inputs down
 | Inputs lost | POD | FAR | AUC |
 |---|---|---|---|
-| 0% | 90.09% | 61.76% | 0.798 |
-| 25% | 94.43% | 69.35% | 0.7574 |
-| 50% | 98.14% | 72.13% | 0.7054 |
-| 75% | 100.00% | 73.06% | 0.6589 |
+| 0% | 90.00% | 34.89% | 0.8549 |
+| 25% | 89.36% | 35.68% | 0.8391 |
+| 50% | 88.20% | 38.07% | 0.8154 |
+| 75% | 88.03% | 45.79% | 0.7616 |
 
 ### Drift + retraining
-- Retrain now: **True** — feature drift: PSI >= 0.25 for tmax_c, rh_min_pct, days_since_rain, precip_30d, dry_streak_30d_cap, doy_sin, doy_cos
+- Retrain now: **False** (no drift signal fired)
 - _Note: Real Indian geography + Feb-May fire season (replaces the Pacific-NW FPA-FOD validation — FIRMS was unreachable when that was first built)._
 - _Note: Label is a FIRMS satellite active-fire detection; severity is FRP (fire radiative power), the satellite intensity proxy, not acres._
 - _Note: The Angström index baseline is the operational fire-weather formula._

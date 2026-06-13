@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import './field.css'
 import BottomNav from './components/BottomNav'
 import CommsScreen from './components/screens/CommsScreen'
 import MapScreen from './components/screens/MapScreen'
@@ -21,17 +22,6 @@ export function Field() {
       default:
         return <OrdersScreen />
     }
-  }
-
-  const isMobile = /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-
-  if (isMobile) {
-    return (
-      <main className="field-module-native">
-        <div className="screen-shell">{renderScreen()}</div>
-        <BottomNav activeScreen={activeScreen} onChange={setActiveScreen} />
-      </main>
-    )
   }
 
   return (

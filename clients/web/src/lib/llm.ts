@@ -39,81 +39,33 @@ async function callOllama(messages: LLMMessage[]): Promise<LLMResponse> {
   };
 }
 
-// ─── ANTHROPIC ────────────────────────────────────────────────────────────────
+// ─── BACKEND LLM PROXY ─────────────────────────────────────────────────────────
+//
+// The browser must NOT call Anthropic/Gemini directly — that ships the API key in
+// the JS bundle to every user (and Anthropic blocks browser calls without the
+// dangerous-direct-browser-access header). The DisasterMind backend exposes
+// POST /llm/generate which holds the key SERVER-SIDE and uses claude-opus-4-8.
+// When no key is configured the backend returns 503 and we fall back to Ollama
+// (and then to an empty response), so the UI never crashes and never fakes prose.
 
-async function callAnthropic(messages: LLMMessage[]): Promise<LLMResponse> {
+async function callBackend(messages: LLMMessage[]): Promise<LLMResponse> {
   const start = Date.now();
-
-  // Separate system message from conversation
-  const systemMsg = messages.find(m => m.role === 'system')?.content ?? '';
-  const conversation = messages.filter(m => m.role !== 'system');
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch(`${config.api.baseUrl}/llm/generate`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': config.llm.anthropicKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      system: systemMsg,
-      messages: conversation,
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages }),
   });
 
   if (!response.ok) {
-    throw new Error(`Anthropic error: ${response.status}`);
+    // 503 = no server-side key (use local fallback); other codes = upstream error.
+    throw new Error(`Backend LLM proxy error: ${response.status}`);
   }
 
   const data = await response.json();
   return {
-    text: data.content?.[0]?.text ?? '',
+    text: data.text ?? '',
     provider: 'anthropic',
-    model: 'claude-haiku-4-5-20251001',
-    durationMs: Date.now() - start,
-  };
-}
-
-// ─── GEMINI ───────────────────────────────────────────────────────────────────
-
-async function callGemini(messages: LLMMessage[]): Promise<LLMResponse> {
-  const start = Date.now();
-
-  // Convert to Gemini format
-  const contents = messages
-    .filter(m => m.role !== 'system')
-    .map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    }));
-
-  const systemInstruction = messages.find(m => m.role === 'system')?.content;
-
-  const body: Record<string, unknown> = { contents };
-  if (systemInstruction) {
-    body.systemInstruction = { parts: [{ text: systemInstruction }] };
-  }
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${config.llm.geminiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`Gemini error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return {
-    text: data.candidates?.[0]?.content?.parts?.[0]?.text ?? '',
-    provider: 'gemini',
-    model: 'gemini-2.0-flash',
+    model: 'claude-opus-4-8',
     durationMs: Date.now() - start,
   };
 }
@@ -121,8 +73,9 @@ async function callGemini(messages: LLMMessage[]): Promise<LLMResponse> {
 // ─── UNIFIED ENTRY POINT ──────────────────────────────────────────────────────
 
 /**
- * Call the configured LLM provider.
- * Falls back to Ollama if the primary provider fails.
+ * Call the LLM via the DisasterMind backend proxy (server-side key, claude-opus-4-8).
+ * Falls back to a local Ollama instance if the backend is unreachable or has no key,
+ * then to an empty response so the UI never crashes.
  *
  * Usage:
  *   const res = await callLLM([
@@ -132,25 +85,16 @@ async function callGemini(messages: LLMMessage[]): Promise<LLMResponse> {
  *   console.log(res.text);
  */
 export async function callLLM(messages: LLMMessage[]): Promise<LLMResponse> {
-  const provider = config.llm.provider;
-
   try {
-    if (provider === 'anthropic' && config.llm.anthropicKey) {
-      return await callAnthropic(messages);
-    }
-    if (provider === 'gemini' && config.llm.geminiKey) {
-      return await callGemini(messages);
-    }
-    // Default: Ollama
-    return await callOllama(messages);
+    return await callBackend(messages);
   } catch (err) {
-    console.warn(`[LLM] ${provider} failed, falling back to Ollama:`, err);
-    // Fallback to Ollama
+    console.warn('[LLM] backend proxy unavailable, falling back to Ollama:', err);
     try {
       return await callOllama(messages);
     } catch (ollamaErr) {
       console.error('[LLM] Ollama fallback also failed:', ollamaErr);
-      // Last resort: return empty response so UI never crashes
+      // Last resort: empty response so UI never crashes (callers render their
+      // own deterministic fallback, e.g. Report.tsx -> buildFallbackReport).
       return {
         text: '',
         provider: 'ollama',

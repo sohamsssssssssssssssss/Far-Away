@@ -27,3 +27,11 @@ dm_artifacts_*/
 
 # env / secrets
 .env
+
+# external-review packet (regenerated via `make review-packet`)
+review_packet/
+
+# coverage artefacts
+.coverage
+.coverage.*
+htmlcov/

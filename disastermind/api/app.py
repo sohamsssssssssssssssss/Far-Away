@@ -246,7 +246,13 @@ def create_app(
     # ------------------------------------------------------------ health/ready
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return svc.health()
+        h = svc.health()
+        # Surface any simulated degradation (resilience demo) so the dashboard can
+        # show it inline; absent/empty by default so the normal payload is unchanged.
+        deg = getattr(app.state, "demo", {}).get("degraded", []) if hasattr(app.state, "demo") else []
+        if deg:
+            h = {**h, "degraded_components": deg}
+        return h
 
     @app.get("/healthz")
     def healthz() -> dict[str, Any]:
@@ -325,12 +331,172 @@ def create_app(
             body = ""
         return PlainTextResponse(body, media_type="text/plain; version=0.0.4")
 
+    # ------------------------------------------------------------ degraded-mode demo
+    # A pitch/ops affordance (PRD Step 10 resilience): mark components as
+    # simulated-down so the dashboard can SHOW the system losing a feed/broker and
+    # *still coordinating* on fallbacks. The whole point is resilience, so the
+    # system stays ``operational`` — this only annotates which components are
+    # degraded; it does not disable the real pipeline. Honest, reversible, in-memory.
+    _DEMO_COMPONENTS = {"usgs", "imd", "open-meteo", "firms", "kafka", "postgis",
+                        "timescale", "elasticsearch", "prediction", "routing"}
+
+    def _demo_state() -> dict[str, Any]:
+        st = getattr(app.state, "demo", None)
+        if st is None:
+            st = {"degraded": []}
+            app.state.demo = st
+        return st
+
+    def demo_status() -> dict[str, Any]:
+        deg = _demo_state()["degraded"]
+        return {
+            "degraded_components": deg,
+            "operational": True,  # resilience: degraded != down — we keep coordinating
+            "mode": "degraded" if deg else "nominal",
+            "known_components": sorted(_DEMO_COMPONENTS),
+        }
+
+    def demo_degrade(component: str = "", active: bool = True, reset: bool = False) -> dict[str, Any]:
+        """Toggle a simulated component failure for the resilience demo.
+
+        ``?component=usgs&active=true`` marks USGS degraded; ``active=false`` clears
+        it; ``?reset=true`` clears all. The system remains operational throughout.
+        """
+        st = _demo_state()
+        deg: list[str] = st["degraded"]
+        if reset:
+            deg.clear()
+        elif component:
+            c = component.strip().lower()
+            if active and c not in deg:
+                deg.append(c)
+            elif not active and c in deg:
+                deg.remove(c)
+        return demo_status()
+
+    app.add_api_route("/demo/status", demo_status, methods=["GET"])
+    app.add_api_route("/demo/degrade", demo_degrade, methods=["POST"])
+
     # Register each data route under BOTH the legacy unversioned path and the
     # ``/v1`` prefix (HARD RULE: additive/back-compat). We attach handlers via
     # ``app.add_api_route`` so the same callable backs both paths with one body.
     def _route(path: str, handler: Any, *, methods: list[str]) -> None:
         app.add_api_route(path, handler, methods=methods)
         app.add_api_route(_API_V1 + path, handler, methods=methods, include_in_schema=False)
+
+    # ------------------------------------------------ validation: cyclone backtest
+    _cyclone_cache: dict[str, Any] = {}
+
+    def validation_cyclone() -> Any:
+        """National cyclone backtest metrics over all real IBTrACS landfalling storms.
+
+        Wraps :func:`disastermind.hindcast.cyclone_backtest.run_national_backtest`
+        (lazy; cached after first build). The same JSON the Evidence map renders —
+        92 real storms, per-region activation, honest 'unknown' accounting.
+        """
+        if "data" not in _cyclone_cache:
+            try:
+                from ..hindcast.cyclone_backtest import run_national_backtest
+
+                _cyclone_cache["data"] = run_national_backtest().to_dict()
+            except Exception:  # pragma: no cover - never take the box down
+                return JSONResponse({"error": "cyclone backtest unavailable"}, status_code=503)
+        return _cyclone_cache["data"]
+
+    _route("/validation/cyclone", validation_cyclone, methods=["GET"])
+
+    # ------------------------------------------------ post-incident report (Step 9)
+    def report_generate() -> Any:
+        """Generate a post-incident report from the live system's audit + bus.
+
+        Replaces the frontend's insecure browser->Anthropic call: the Anthropic
+        key stays SERVER-SIDE (never shipped to the client), the model is
+        ``claude-opus-4-8`` via the llm layer, and it degrades to a deterministic
+        template + the always-available structured report when no key is set.
+        Returns ``{markdown, report, narrative, narrative_source}``.
+        """
+        try:
+            from ..reporting import IncidentReporter
+
+            bus = getattr(loop, "bus", None)
+            lg = getattr(loop, "logger", None)
+            report = IncidentReporter(bus=bus, logger=lg).generate()
+            out: dict[str, Any] = {"report": report.to_dict(), "markdown": report.to_markdown()}
+        except Exception:  # pragma: no cover - never take the box down
+            return JSONResponse({"error": "report unavailable"}, status_code=503)
+        # Executive summary. With a real Anthropic key (server-side) we ask
+        # claude-opus-4-8 for prose; otherwise (TemplateClient echoes its prompt)
+        # we synthesise a deterministic summary from the report itself — never an
+        # echoed instruction.
+        rpt = out["report"]
+        deterministic = (
+            f"Incident {rpt.get('incident_id') or 'n/a'}: {rpt.get('message_count', 0)} "
+            f"messages, {len(rpt.get('decisions', []))} decisions, "
+            f"{len(rpt.get('escalations', []))} escalations, "
+            f"{len(rpt.get('dispatch', []))} dispatch orders. "
+            "See the full report for the timeline, equity-weighted allocation and "
+            "SHAP-attributed predictions."
+        )
+        try:
+            from ..llm.client import make_client
+
+            client = make_client(getattr(loop, "settings", None))
+            if getattr(client, "name", "template") == "anthropic":
+                out["narrative"] = client.generate(
+                    "Write a concise (<=150 word) post-incident executive summary for "
+                    "an emergency commander, from this report:\n\n" + out["markdown"]
+                )
+                out["narrative_source"] = "anthropic"
+            else:
+                out["narrative"] = deterministic
+                out["narrative_source"] = "template"
+        except Exception:  # pragma: no cover - narrative is best-effort
+            out["narrative"] = deterministic
+            out["narrative_source"] = "template"
+        return out
+
+    _route("/report/generate", report_generate, methods=["POST", "GET"])
+
+    # ------------------------------------------------ LLM proxy (server-side key)
+    async def llm_generate(request: Request) -> Any:
+        """Server-side LLM proxy for the frontend's ``callLLM`` (report generator).
+
+        The browser must NOT call Anthropic directly (it would ship the key in the
+        bundle and needs the dangerous-direct-browser-access header). This proxies
+        ``{messages:[{role,content}]}`` to ``claude-opus-4-8`` with the key held
+        SERVER-SIDE, returning ``{text, source}``. With no key configured it
+        returns 503 so the caller falls back to its own deterministic report —
+        we never fake LLM prose.
+        """
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        messages = body.get("messages") if isinstance(body, dict) else None
+        if not isinstance(messages, list) or not messages:
+            return JSONResponse({"error": "messages[] required"}, status_code=400)
+        system = " ".join(
+            str(m.get("content", "")) for m in messages if m.get("role") == "system"
+        )
+        user = "\n".join(
+            str(m.get("content", "")) for m in messages if m.get("role") != "system"
+        )
+        prompt = (system + "\n\n" + user).strip()
+        try:
+            from ..llm.client import make_client
+
+            client = make_client(getattr(loop, "settings", None))
+            if getattr(client, "name", "template") != "anthropic":
+                return JSONResponse(
+                    {"error": "LLM not configured (set DM_ANTHROPIC_KEY); use local fallback",
+                     "source": "none"},
+                    status_code=503,
+                )
+            return {"text": client.generate(prompt), "source": "anthropic"}
+        except Exception:  # pragma: no cover - upstream failure -> caller falls back
+            return JSONResponse({"error": "LLM call failed", "source": "error"}, status_code=502)
+
+    _route("/llm/generate", llm_generate, methods=["POST"])
 
     # ------------------------------------------------------------------- topics
     def topics() -> dict[str, int]:

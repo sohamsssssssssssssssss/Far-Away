@@ -1,9 +1,26 @@
-# DisasterMind — Autonomous Disaster Coordination (Group A)
+# DisasterMind — Multi-Agent Disaster Coordination (Group A)
+
+[![CI](https://github.com/AtharvaPatil466/Far-Away/actions/workflows/ci.yml/badge.svg)](https://github.com/AtharvaPatil466/Far-Away/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-1045%20passing-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)
+![Typecheck](https://img.shields.io/badge/mypy-core%20gated-blue)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
+![Core deps](https://img.shields.io/badge/runtime-stdlib--only-success)
 
 A multi-agent system that detects a disaster, predicts its evolution, optimises
-the response, and issues field & public orders **autonomously**, escalating to
-humans only when a decision crosses a defined authority threshold. India-focused
-(IMD / CWC / NCS / ISRO Bhuvan feeds) across three hazard modules:
+the response, and drives a **bounded-authority** command pipeline to dispatch.
+India-focused (IMD / CWC / NCS / ISRO Bhuvan feeds) across three hazard modules:
+
+> **Authority model (read this first).** DisasterMind is *decision-support*: a
+> human commander holds authority over every consequential action. Only routine
+> field tasking dispatches without sign-off. Any order crossing a defined
+> authority threshold — **mass evacuations (> 10,000 people)**, cross-jurisdiction
+> resources, military assets, or media broadcast — **requires human approval**
+> (auto-executing only on timeout), and a set of high-consequence actions
+> (declaring a state of emergency, deploying armed forces, international aid,
+> critical-infrastructure requisition) are **human-only and never act without a
+> commander**. The system *recommends*; a human *acts* on the decisions that
+> matter. See [`disastermind/tier1/commander/matrix.py`](disastermind/tier1/commander/matrix.py).
 
 | Module | Hazard | Activates |
 |--------|--------|-----------|
@@ -66,7 +83,7 @@ degrade gracefully and lets any agent be swapped or scaled independently.
 
 ```bash
 # stdlib-only: no broker, solver, ML lib or network required
-python -m pytest -q                      # 620 tests, all offline (stdlib only)
+python -m pytest -q                      # 1045 tests, all offline (stdlib only)
 
 python - <<'PY'                          # drive a synthetic disaster
 from disastermind.orchestration.build import build_system, should_activate, Signals
@@ -79,6 +96,35 @@ PY
 
 Run the real wall-clock loop: `loop.run(max_cycles=N)` ticks every
 `DM_LOOP_INTERVAL` (default 30 s) while `disaster_active`.
+
+## See it work — the narrated hero demo
+
+```bash
+make demo                  # Cyclone Fani (2019); or: make demo STORM=amphan
+```
+
+A guided, leak-free command walkthrough of a real cyclone, told as a timeline of
+decisions a commander actually faces — *what we know*, *what the system
+recommends* (and what stays a human's call), and *the cost of waiting* — at each
+forecast cutoff from T−72 h to T−12 h, then scored against the documented outcome
+with an explicit honesty boundary.
+
+## Reproduce the validation numbers (one command)
+
+Every headline metric in [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md) §5 is
+regenerable from the committed real-data fixtures — offline, deterministically,
+with no optional dependencies:
+
+```bash
+make reproduce        # re-runs the full validation suite and diffs vs docs/validation_golden.json
+```
+
+It rebuilds each hazard's out-of-sample **AUC / Brier / ECE** from raw fixtures
+(USGS quakes, GloFAS/ERA5 floods, FPA-FOD/FIRMS fires), prints a claimed-vs-
+reproduced table, and **exits non-zero on any drift**. A clean checkout
+reproduces all 12 metrics exactly (Δ = 0.0000); the same check runs in CI on
+every push, so the published table is a continuously-verified artefact rather
+than a static claim.
 
 ### Optional capabilities (graceful upgrades)
 

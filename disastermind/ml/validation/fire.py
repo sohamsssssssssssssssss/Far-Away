@@ -43,17 +43,17 @@ from dataclasses import dataclass
 FIXTURE = os.path.join(
     os.path.dirname(__file__), "fixtures", "fpafod_era5_fire_2012_2018.json"
 )
-#: India fire fixture (NASA FIRMS VIIRS detections + ERA5), 2019-2023. Same schema
-#: as the PNW fixture; its fire records carry ``frp`` (radiative power) instead of
-#: ``size_acres`` — :func:`load_rows` reads either as the severity payload.
+#: India fire fixture (NASA FIRMS VIIRS detections + ERA5), 2015-2024 (10 real fire
+#: seasons, ~239k in-cell detections across 10 Indian fire-region cells). Same
+#: schema as the PNW fixture; its fire records carry ``frp`` (radiative power)
+#: instead of ``size_acres`` — :func:`load_rows` reads either as the severity payload.
 INDIA_FIXTURE = os.path.join(
-    os.path.dirname(__file__), "fixtures", "firms_era5_fire_india_2019_2023.json"
+    os.path.dirname(__file__), "fixtures", "firms_era5_fire_india_2015_2024.json"
 )
-#: India fixture is currently a single FIRMS year (2019) — multi-year pending a
-#: reliable FIRMS bulk pull — so it validates via an INTRA-year temporal split:
-#: train on dates before the cutoff, test on strictly later dates (leak-free).
-#: 2019-05-01 puts the Feb-Apr fire ramp in train and the May peak + decline in test.
-INDIA_SPLIT_DATE = _dt.date(2019, 5, 1)
+#: Multi-year leak-free TEMPORAL split: train on the 2015-2021 fire seasons, test
+#: on strictly-later 2022-2024 (three held-out seasons) — no shuffle, no
+#: cross-year contamination. (Was a single intra-2019 split before the bulk pull.)
+INDIA_SPLIT_DATE = _dt.date(2022, 1, 1)
 
 #: Leak-free feature names, in feature order.
 FEATURE_NAMES = (

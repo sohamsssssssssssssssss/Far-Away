@@ -1,3 +1,5 @@
+import { callLLM } from '../lib/llm'
+
 export interface AuditEntry {
   id: string
   timestamp: number
@@ -63,24 +65,16 @@ ${JSON.stringify(auditLog, null, 2)}
 Current timestamp: ${new Date().toISOString()}
 Generate the post-incident report now.`
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1500,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
-    }),
-  })
+  // Routed through the DisasterMind backend proxy (POST /llm/generate) — the
+  // Anthropic key stays server-side (claude-opus-4-8), never in the browser bundle.
+  const { text: rawText } = await callLLM([
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: userMessage },
+  ])
 
-  if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    throw new Error(`Anthropic API error: ${response.status}${body ? ` — ${body}` : ''}`)
+  if (!rawText) {
+    throw new Error('Report generation unavailable (no server-side LLM configured)')
   }
-
-  const data = await response.json()
-  const rawText: string = data.content?.[0]?.text ?? ''
 
   // Strip accidental markdown code fences
   const cleaned = rawText

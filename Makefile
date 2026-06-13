@@ -28,7 +28,7 @@ SBOM        ?= sbom.json
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install dev test lint run simulate verify-audit \
+.PHONY: help install dev test lint reproduce demo review-packet run simulate verify-audit \
         compose-up compose-down docker-build docker-run deploy-check sbom clean
 
 help: ## Show this help.
@@ -47,6 +47,15 @@ test: ## Run the full test-suite (stdlib only).
 
 lint: ## Compile-check every module (stdlib byte-compile; no extra tooling).
 	$(PYTHON) -m compileall -q disastermind tests
+
+reproduce: ## Regenerate every published validation number from raw fixtures and diff (offline).
+	$(PYTHON) tools/reproduce.py
+
+demo: ## Narrated command walkthrough of a real cyclone: `make demo STORM=fani|amphan`.
+	$(PYTHON) -m disastermind.hindcast.walkthrough --storm $(or $(STORM),fani)
+
+review-packet: ## Build the self-contained external-review packet (./review_packet/).
+	$(PYTHON) tools/review_packet.py
 
 run: ## Build the agent DAG and drive the coordination loop (PRD Step 10).
 	$(PYTHON) -m disastermind run --max-cycles $(MAX_CYCLES)

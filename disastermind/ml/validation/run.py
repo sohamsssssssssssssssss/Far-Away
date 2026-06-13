@@ -643,10 +643,10 @@ def india_fire_spec(path: str | None = None) -> HazardSpec:
     return HazardSpec(
         name="fire-india",
         source="NASA FIRMS (VIIRS-SNPP) active-fire detections + ERA5 fire weather, "
-        "10 Indian fire-belt cells, 2019 daily (real outcomes)",
+        "10 Indian fire-belt cells, 2015-2024 daily (~239k in-cell detections, real)",
         label_desc=">=1 FIRMS active-fire detection in the cell on day t+1",
-        split_desc="intra-year temporal: train Jan-Apr 2019, test May-Dec 2019 "
-        "(single year; multi-year pending a reliable FIRMS bulk pull)",
+        split_desc="temporal: train 2015-2021 fire seasons, test 2022-2024 "
+        "(three held-out seasons, out-of-sample; no cross-year leakage)",
         feature_names=fire_ds.FEATURE_NAMES,
         Xtr=Xtr,
         ytr=ytr,

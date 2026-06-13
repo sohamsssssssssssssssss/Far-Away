@@ -3,10 +3,8 @@ import type { UnifiedModuleKey } from './TopNav'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
 
-type NavKey = UnifiedModuleKey | 'resources'
-
 interface NavItem {
-  key: NavKey
+  key: UnifiedModuleKey
   label: string
   icon: string
 }
@@ -15,7 +13,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
   { key: 'escalation', label: 'Escalations', icon: 'warning' },
   { key: 'report', label: 'Incidents', icon: 'emergency' },
-  { key: 'resources', label: 'Resources', icon: 'inventory_2' },
+  { key: 'evidence', label: 'Evidence', icon: 'fact_check' },
 ]
 
 const formatClock = (date: Date) =>
@@ -121,27 +119,21 @@ export function CommandShell({ activeModule, onChange, children }: CommandShellP
         <div className="flex-1 space-y-1 px-4">
           {NAV_ITEMS.map((item) => {
             const isActive = item.key === activeModule
-            const isResources = item.key === 'resources'
             return (
               <button
                 key={item.key}
                 type="button"
-                disabled={isResources}
-                onClick={() => !isResources && onChange(item.key as UnifiedModuleKey)}
+                onClick={() => onChange(item.key)}
                 className={cn(
                   'flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-label-md transition-all duration-150 active:scale-[0.98]',
                   isActive
                     ? 'border-r-4 border-tertiary-container bg-surface-container-high font-bold text-primary'
                     : 'text-secondary hover:bg-surface-container-highest',
-                  isResources && 'cursor-not-allowed opacity-45 hover:bg-transparent',
                   item.key === 'escalation' && flashEscalation && 'animate-pulse bg-error/10 text-error',
                 )}
               >
                 <Icon name={item.icon} filled={isActive} className="text-[20px]" />
                 <span>{item.label}</span>
-                {isResources && (
-                  <span className="ml-auto text-label-sm uppercase text-outline">soon</span>
-                )}
               </button>
             )
           })}

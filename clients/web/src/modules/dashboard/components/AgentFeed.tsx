@@ -190,7 +190,7 @@ function mapMessageToEntry(message: AgentMessage): AgentEntry {
     time: formatMessageTime(message.timestamp),
     agent: formatAgentName(message.sender),
     summary: extractMessageText(message),
-    detail: message.reasoning.length > 0 ? message.reasoning.join(' → ') : 'No reasoning supplied by Group A.',
+    detail: (message.reasoning && message.reasoning.length > 0) ? message.reasoning.join(' → ') : 'No reasoning supplied by Group A.',
     severity: priorityToSeverity(message.priority),
     isNew: true,
   }
@@ -349,11 +349,13 @@ export function AgentFeed({ connectionState, incomingMessage, customEntry, onOve
           const isOpen = openEntry === entry.id
           const isHighSeverity = entry.severity === 'critical'
           return (
-            <button
+            <div
               className={`feed-entry ${isOpen ? 'is-open' : ''} ${entry.isNew ? 'feed-entry-new' : ''} ${isHighSeverity ? 'high-severity' : ''}`}
-              type="button"
+              role="button"
+              tabIndex={0}
               key={entry.id}
               onClick={() => setOpenEntry(isOpen ? null : entry.id)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenEntry(isOpen ? null : entry.id) } }}
             >
               <div className={`feed-main ${isHighSeverity ? 'has-critical' : ''}`}>
                 <span className="timestamp">{entry.time}</span>
@@ -412,7 +414,7 @@ export function AgentFeed({ connectionState, incomingMessage, customEntry, onOve
                   </div>
                 </>
               )}
-            </button>
+            </div>
           )
         })}
       </div>

@@ -45,7 +45,8 @@ const oldEscalations: OldQueueItem[] = [
   },
 ]
 
-function payloadText(payload: Record<string, unknown>, keys: string[], fallback: string) {
+function payloadText(payload: Record<string, unknown> | undefined, keys: string[], fallback: string) {
+  if (!payload) return fallback
   for (const key of keys) {
     const value = payload[key]
     if (typeof value === 'string' && value.trim()) {
@@ -56,7 +57,8 @@ function payloadText(payload: Record<string, unknown>, keys: string[], fallback:
 }
 
 function escalationIdFromMessage(message: AgentMessage) {
-  const payloadId = message.payload.escalation_id ?? message.payload.escalationId ?? message.payload.id
+  const p = message.payload ?? {}
+  const payloadId = p.escalation_id ?? p.escalationId ?? p.id
   if (typeof payloadId === 'string' && payloadId.trim()) {
     return payloadId
   }
@@ -67,10 +69,11 @@ function escalationIdFromMessage(message: AgentMessage) {
 }
 
 function messageToQueueItem(message: AgentMessage, decisionRequiredBy?: string): OldQueueItem {
-  const fallbackSummary = message.reasoning[0] ?? 'Group A escalation requires commander review.'
-  const title = payloadText(message.payload, ['title', 'summary', 'action'], 'GROUP A ESCALATION')
-  const situation = payloadText(message.payload, ['situation', 'summary', 'description'], fallbackSummary)
-  const recommended = payloadText(message.payload, ['recommended', 'recommendation', 'action'], fallbackSummary)
+  const fallbackSummary = message.reasoning?.[0] ?? 'Group A escalation requires commander review.'
+  const p = message.payload ?? {}
+  const title = payloadText(p, ['title', 'summary', 'action'], 'GROUP A ESCALATION')
+  const situation = payloadText(p, ['situation', 'summary', 'description'], fallbackSummary)
+  const recommended = payloadText(p, ['recommended', 'recommendation', 'action'], fallbackSummary)
   const createdAt = new Date(message.timestamp)
   const fallbackDeadline = new Date(
     Number.isNaN(createdAt.getTime()) ? Date.now() + 300000 : createdAt.getTime() + 300000,

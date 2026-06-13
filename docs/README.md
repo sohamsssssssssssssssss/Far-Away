@@ -1,6 +1,6 @@
 # DisasterMind — Documentation
 
-Operator- and developer-facing docs for the DisasterMind autonomous disaster
+Operator- and developer-facing docs for the DisasterMind multi-agent disaster
 coordination platform. All facts are derived from `README.md` and the code
 (topic names, endpoints, CLI flags, and model names match the source).
 

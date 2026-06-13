@@ -220,6 +220,7 @@ export function connectWebSocket(
  *  "commander_agent"  → "COMMANDER-AI"
  */
 export function formatAgentName(sender: string): string {
+  if (!sender) return 'UNKNOWN-AI';
   return sender
     .replace(/_agent$/, '')
     .replace(/_/g, '-')
@@ -242,10 +243,10 @@ export function priorityToSeverity(
 
 /** Extract display text from a message payload */
 export function extractMessageText(msg: AgentMessage): string {
-  const p = msg.payload;
+  const p = msg.payload ?? {};
   if (typeof p.summary === 'string') return p.summary;
   if (typeof p.action === 'string') return p.action;
   if (typeof p.description === 'string') return p.description;
-  if (msg.reasoning.length > 0) return msg.reasoning[0];
-  return `${formatAgentName(msg.sender)} decision on ${msg.topic}`;
+  if (msg.reasoning && msg.reasoning.length > 0) return msg.reasoning[0];
+  return `${formatAgentName(msg.sender)} decision on ${msg.topic ?? 'unknown'}`;
 }
