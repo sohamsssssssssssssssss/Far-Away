@@ -1,6 +1,7 @@
 # DisasterMind — Multi-Agent Disaster Coordination (Group A)
 
 [![CI](https://github.com/AtharvaPatil466/Far-Away/actions/workflows/ci.yml/badge.svg)](https://github.com/AtharvaPatil466/Far-Away/actions/workflows/ci.yml)
+[![shadow season](https://github.com/AtharvaPatil466/Far-Away/actions/workflows/shadow-season.yml/badge.svg)](https://github.com/AtharvaPatil466/Far-Away/actions/workflows/shadow-season.yml)
 ![Tests](https://img.shields.io/badge/tests-1045%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)
 ![Typecheck](https://img.shields.io/badge/mypy-core%20gated-blue)
@@ -108,6 +109,24 @@ decisions a commander actually faces — *what we know*, *what the system
 recommends* (and what stays a human's call), and *the cost of waiting* — at each
 forecast cutoff from T−72 h to T−12 h, then scored against the documented outcome
 with an explicit honesty boundary.
+
+## A live shadow season is running
+
+The model isn't just validated on history — it's **predicting live**. A scheduled
+job pulls the public USGS M4.5+ feed, journals a leak-free impact prediction for
+each new earthquake (using the *same* validated model behind the published 0.937
+AUC), and settles the real outcome days later — into an append-only, hash-chained
+journal at [`shadow/usgs_season.jsonl`](shadow/usgs_season.jsonl) that no one can
+curate after the fact.
+
+```bash
+make shadow-tick      # pull the live feed, journal new predictions + settle outcomes
+make shadow-score     # running scorecard (POD/FAR/AUC/Brier; honest n_unresolved)
+make shadow-verify    # prove the hash-chain is intact
+```
+
+This is the decisive validation step — predicting on data the model has never
+seen — in motion. See [`docs/SHADOW_SEASON.md`](docs/SHADOW_SEASON.md).
 
 ## Reproduce the validation numbers (one command)
 

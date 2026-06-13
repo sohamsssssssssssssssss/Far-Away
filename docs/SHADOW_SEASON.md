@@ -62,10 +62,26 @@ python -m disastermind.ml.shadow_season --journal season.jsonl export -o review_
 5. **Hand the packet to an external reviewer.** It contains the scorecard *and*
    every individual prediction — the misses are not removable.
 
+## It is already running (live USGS earthquake season)
+
+The "wire a keyless feed and start the cron" step is **done** for earthquakes:
+
+- `disastermind/live/usgs_shadow.py` pulls the public USGS M4.5+ feed, journals a
+  leak-free impact prediction per new event with the **same validated logistic**
+  behind the published 0.937 AUC, and settles real outcomes after a 2-day window.
+- The `shadow-season` GitHub workflow runs it daily and commits the growing
+  journal to `shadow/usgs_season.jsonl` (seeded on first run with live events).
+- Drive it locally with `make shadow-tick` / `make shadow-score` /
+  `make shadow-verify`; tested offline in `tests/test_usgs_shadow.py`.
+
+To add **flood** or **fire** seasons, point their adapters at the features file as
+described above — the same journal/scoring/export machinery applies.
+
 ## Status
 
-- **Ready now:** journal, CLI, scoring, export, tamper-evidence — all tested
-  (`tests/test_shadow_season.py`, including a forged-record detection test).
-- **Your move:** wire one keyless live feed to the features file and start the
-  cron. A 30–60 day journal against live data is a credential almost no
-  comparable project can show.
+- **Running now:** the live USGS earthquake season (above) — predictions accruing,
+  outcomes settling on the 2-day window, hash-chain verified each run.
+- **Ready to wire:** flood (Open-Meteo/GloFAS) and fire (FIRMS) seasons via the
+  features-file seam.
+- **The payoff:** a 30–60 day journal against live data is a credential almost no
+  comparable project can show — and it now accumulates on its own.

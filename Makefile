@@ -29,7 +29,7 @@ SBOM        ?= sbom.json
 .DEFAULT_GOAL := help
 
 .PHONY: help install dev test lint typecheck typecheck-advisory reproduce demo review-packet \
-        run simulate verify-audit \
+        shadow-tick shadow-score shadow-verify run simulate verify-audit \
         compose-up compose-down docker-build docker-run deploy-check sbom clean
 
 help: ## Show this help.
@@ -76,6 +76,14 @@ demo: ## Narrated command walkthrough of a real cyclone: `make demo STORM=fani|a
 
 review-packet: ## Build the self-contained external-review packet (./review_packet/).
 	$(PYTHON) tools/review_packet.py
+
+SHADOW_JOURNAL ?= shadow/usgs_season.jsonl
+shadow-tick: ## Pull the live USGS feed and journal new predictions + settle outcomes.
+	$(PYTHON) -m disastermind.live.usgs_shadow --journal $(SHADOW_JOURNAL) --mode both
+shadow-score: ## Print the running live-season scorecard (POD/FAR/AUC/Brier).
+	$(PYTHON) -m disastermind.ml.shadow_season --journal $(SHADOW_JOURNAL) score
+shadow-verify: ## Prove the live-season journal hash-chain is intact.
+	$(PYTHON) -m disastermind.ml.shadow_season --journal $(SHADOW_JOURNAL) verify
 
 run: ## Build the agent DAG and drive the coordination loop (PRD Step 10).
 	$(PYTHON) -m disastermind run --max-cycles $(MAX_CYCLES)
