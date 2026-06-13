@@ -1,5 +1,12 @@
 # DisasterMind — Multi-Agent Disaster Coordination (Group A)
 
+[![CI](https://github.com/AtharvaPatil466/Far-Away/actions/workflows/ci.yml/badge.svg)](https://github.com/AtharvaPatil466/Far-Away/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-1045%20passing-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)
+![Typecheck](https://img.shields.io/badge/mypy-core%20gated-blue)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
+![Core deps](https://img.shields.io/badge/runtime-stdlib--only-success)
+
 A multi-agent system that detects a disaster, predicts its evolution, optimises
 the response, and drives a **bounded-authority** command pipeline to dispatch.
 India-focused (IMD / CWC / NCS / ISRO Bhuvan feeds) across three hazard modules:

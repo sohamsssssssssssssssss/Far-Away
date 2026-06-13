@@ -11,9 +11,11 @@
 # explicitly ignored here.
 #
 # Quality gates layered on top of the test matrix + docker build:
+#   * test       — pytest matrix with an ENFORCED 83% coverage floor.
 #   * lint       — ruff check (fast, deterministic style/correctness lint).
-#   * typecheck  — mypy on disastermind/ (advisory: continue-on-error so a noisy
-#                  type surface never blocks the pipeline; tighten over time).
+#   * typecheck  — mypy BLOCKING on the safety-critical core (contracts,
+#                  commander matrix, evacuation, alerting, eval metrics) and
+#                  advisory on the rest; expand the blocking set as it cleans up.
 #   * security   — Trivy filesystem + image scan and a pip-audit of the dep tree.
 #   * sbom       — CycloneDX software bill-of-materials, uploaded as an artefact.
 name: ci
@@ -56,9 +58,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[dev]
 
-      - name: Run tests
+      - name: Run tests (coverage-gated)
         # The clients/ and tests/integration/ trees belong to other workstreams.
-        run: python -m pytest -q --ignore=tests/integration --ignore=clients
+        # Coverage floor is an ENFORCED gate: the suite measured 86% — 83% leaves
+        # headroom for minor cross-interpreter variance while blocking regressions.
+        run: >-
+          python -m pytest -q --ignore=tests/integration --ignore=clients
+          --cov=disastermind --cov-report=term-missing --cov-fail-under=83
 
   lint:
     name: lint (ruff)
@@ -86,9 +92,6 @@ jobs:
   typecheck:
     name: typecheck (mypy)
     runs-on: ubuntu-latest
-    # Advisory gate: a static-typing surface this large is noisy, so a failure
-    # must NOT block merges. We still surface the report in the job log.
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -105,9 +108,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[lint]
 
-      - name: mypy
-        # Non-blocking even if the step itself errors (belt-and-braces alongside
-        # the job-level continue-on-error above).
+      - name: mypy (safety-critical core — BLOCKING)
+        # These packages are mypy-clean today and carry the consequential logic
+        # (contracts, the commander authority matrix, the evacuation decision
+        # layer, alerting, and the evaluation metrics). Regressing their type
+        # surface blocks the merge — the rigor is gated, not advisory.
+        run: >-
+          mypy
+          disastermind/core
+          disastermind/tier1
+          disastermind/evacuation
+          disastermind/alerting
+          disastermind/ml/eval/conformal.py
+          disastermind/ml/eval/decision.py
+          disastermind/ml/eval/metrics.py
+
+      - name: mypy (full tree — advisory)
+        # The remaining surface is gradually typed; report it without blocking,
+        # and expand the BLOCKING set above as packages reach zero errors.
         continue-on-error: true
         run: mypy disastermind/
 
