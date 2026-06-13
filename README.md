@@ -97,6 +97,18 @@ PY
 Run the real wall-clock loop: `loop.run(max_cycles=N)` ticks every
 `DM_LOOP_INTERVAL` (default 30 s) while `disaster_active`.
 
+## See it work — the narrated hero demo
+
+```bash
+make demo                  # Cyclone Fani (2019); or: make demo STORM=amphan
+```
+
+A guided, leak-free command walkthrough of a real cyclone, told as a timeline of
+decisions a commander actually faces — *what we know*, *what the system
+recommends* (and what stays a human's call), and *the cost of waiting* — at each
+forecast cutoff from T−72 h to T−12 h, then scored against the documented outcome
+with an explicit honesty boundary.
+
 ## Reproduce the validation numbers (one command)
 
 Every headline metric in [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md) §5 is
