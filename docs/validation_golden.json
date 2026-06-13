@@ -16,7 +16,7 @@
       "auc": 0.8374, "brier": 0.1205, "ece": 0.0227
     },
     "fire-india": {
-      "source": "NASA FIRMS VIIRS + ERA5, India 2019, leak-free intra-year split",
+      "source": "NASA FIRMS VIIRS + ERA5, India, train 2015-2021 / test 2022-2024",
       "auc": 0.8538, "brier": 0.1526, "ece": 0.0151
     }
   }

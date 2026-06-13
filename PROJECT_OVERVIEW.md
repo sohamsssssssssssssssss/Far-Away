@@ -211,14 +211,17 @@ with live status, override controls, SHAP explanations, and PDF report export.
 
 All figures are produced by the validation suite on committed real-data fixtures
 with strictly temporal splits; operating thresholds and calibrators are fit on a
-calibration split, never on the test set.
+calibration split, never on the test set. See
+[`docs/TECHNICAL_REPORT.md`](docs/TECHNICAL_REPORT.md) for the full evaluation
+including baseline-significance tables, worst-block generalisation, and a frank
+failure analysis; reproduce every number with `make reproduce`.
 
 | Hazard | Data source | Out-of-sample AUC | Brier | ECE | Actionable lead (POD ≥ 80%) |
 |---|---|---:|---:|---:|---|
 | **Earthquake** | USGS catalog (2013–2017, M4.5+) | **0.937** | 0.011 | 0.002 | n/a (instantaneous) |
 | **Flood** | GloFAS-ERA5, 12 Indian basins (2010–2023) | **0.944** | 0.028 | 0.004 | **168 h (7 days)** |
 | **Fire (PNW)** | USDA FPA-FOD + ERA5 (2012–2018) | **0.837** | 0.121 | 0.023 | **72 h (3 days)** |
-| **Fire (India)** | NASA FIRMS VIIRS + ERA5 (2019) | 0.80 (raw) | 0.166 | 0.043 | seasonal* |
+| **Fire (India)** | NASA FIRMS VIIRS + ERA5 (2015–2024) | **0.855** | 0.153 | 0.015 | seasonal* |
 
 **Beats the operational incumbents, with statistical significance:**
 - **Flood** beats *persistence* (the standard no-model hydrological forecast,
@@ -238,9 +241,10 @@ earthquake ECE 0.21 → 0.002), conformal coverage at target, blocked cross-
 validation worst-block scores, a published fairness audit with remediation, and
 rare-severe tail analysis.
 
-\* The India fire model is validated on a single FIRMS year via a leak-free
-intra-year split; its strong seasonal base-rate shift makes the fixed-threshold
-operating point conservative while discrimination (AUC) remains solid.
+\* The India fire model is trained on the 2015–2021 FIRMS fire seasons and tested
+out-of-sample on three held-out seasons (2022–2024). At the dispatch threshold it
+reaches POD 0.92 / FAR 0.37 (CSI 0.60) — the strongest operational decision quality
+of the four models. "Seasonal" lead reflects the next-day ignition framing.
 
 ---
 
@@ -251,7 +255,7 @@ operating point conservative while discrimination (AUC) remains solid.
 | Earthquakes | USGS FDSN catalog | ~36,500 real M4.5+ events, 2013–2017 |
 | Floods | GloFAS-ERA5 discharge + ERA5 rainfall (Open-Meteo) | 12 Indian river-basin sites, 2010–2023 |
 | Fire (US) | USDA FPA-FOD occurrences + ERA5 | 12 Pacific-Northwest cells, 2012–2018 |
-| Fire (India) | NASA FIRMS VIIRS detections + ERA5 | 10 Indian fire-belt cells, 2019 |
+| Fire (India) | NASA FIRMS VIIRS detections + ERA5 | 10 Indian fire-belt cells, 2015–2024 |
 | Cyclones | NOAA IBTrACS best tracks | 92 named India-landfalling storms, 1990–2025 |
 | Cyclone cases | IBTrACS + documented outcomes (IMD/EM-DAT) | Fani 2019, Amphan 2020 |
 | Infrastructure | OpenStreetMap road graph, Copernicus DEM, Census | Puri / Fani impact zone |
@@ -297,8 +301,8 @@ decision layers are complete and operate end-to-end on real historical events.
   agency ground truth.
 - Some outcome labels are well-justified proxies (discharge exceedance,
   instrumental intensity, satellite detections) rather than surveyed losses.
-- The India fire model is currently single-year; multi-year expansion is
-  data-availability-bound.
+- Regional generalisation is weaker than the headline: worst-block AUC falls to
+  ~0.80 for both fire models (see the technical report's failure analysis).
 
 **Roadmap to operational deployment:**
 1. Calibrate the evacuation layer against district-level historical response data.
