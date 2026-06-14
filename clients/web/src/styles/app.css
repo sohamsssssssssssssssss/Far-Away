@@ -13,6 +13,7 @@
 @import '../index.css' layer(legacy);
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import './modules.css' layer(components);
 
 /* --------------------------------------------------------------------------
  * Design tokens — ported verbatim from the Stitch Material-3 export.
