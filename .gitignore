@@ -35,3 +35,6 @@ review_packet/
 .coverage
 .coverage.*
 htmlcov/
+
+# agent worktrees
+.claude/worktrees/

@@ -28,7 +28,8 @@ SBOM        ?= sbom.json
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install dev test lint reproduce demo review-packet run simulate verify-audit \
+.PHONY: help install dev test lint typecheck typecheck-advisory reproduce demo review-packet \
+        shadow-tick shadow-score shadow-verify run simulate verify-audit \
         compose-up compose-down docker-build docker-run deploy-check sbom clean
 
 help: ## Show this help.
@@ -48,6 +49,25 @@ test: ## Run the full test-suite (stdlib only).
 lint: ## Compile-check every module (stdlib byte-compile; no extra tooling).
 	$(PYTHON) -m compileall -q disastermind tests
 
+# Single source of truth for the BLOCKING mypy gate: packages proven type-clean
+# today. CI's typecheck job calls `make typecheck`; expand this list as more
+# packages reach zero errors (see `make typecheck-advisory` for the full tree).
+MYPY_GATED = \
+  disastermind/core disastermind/tier1 disastermind/evacuation disastermind/alerting \
+  disastermind/ml/eval/conformal.py disastermind/ml/eval/decision.py disastermind/ml/eval/metrics.py \
+  disastermind/models disastermind/orchestration disastermind/federation \
+  disastermind/multi_incident disastermind/observability disastermind/persistence \
+  disastermind/roadnet disastermind/fieldapp disastermind/diagnostics \
+  disastermind/benchmarks disastermind/logconfig disastermind/tier2/cascade \
+  disastermind/tier2/resource disastermind/tier2/field disastermind/tier2/prediction \
+  disastermind/tier3/ingestion disastermind/tier3/iot
+
+typecheck: ## Run the BLOCKING mypy gate (type-clean packages; must stay green).
+	$(PYTHON) -m mypy $(MYPY_GATED)
+
+typecheck-advisory: ## Run mypy over the whole tree (advisory; reports the gradually-typed remainder).
+	$(PYTHON) -m mypy disastermind/
+
 reproduce: ## Regenerate every published validation number from raw fixtures and diff (offline).
 	$(PYTHON) tools/reproduce.py
 
@@ -56,6 +76,14 @@ demo: ## Narrated command walkthrough of a real cyclone: `make demo STORM=fani|a
 
 review-packet: ## Build the self-contained external-review packet (./review_packet/).
 	$(PYTHON) tools/review_packet.py
+
+SHADOW_JOURNAL ?= shadow/usgs_season.jsonl
+shadow-tick: ## Pull the live USGS feed and journal new predictions + settle outcomes.
+	$(PYTHON) -m disastermind.live.usgs_shadow --journal $(SHADOW_JOURNAL) --mode both
+shadow-score: ## Print the running live-season scorecard (POD/FAR/AUC/Brier).
+	$(PYTHON) -m disastermind.ml.shadow_season --journal $(SHADOW_JOURNAL) score
+shadow-verify: ## Prove the live-season journal hash-chain is intact.
+	$(PYTHON) -m disastermind.ml.shadow_season --journal $(SHADOW_JOURNAL) verify
 
 run: ## Build the agent DAG and drive the coordination loop (PRD Step 10).
 	$(PYTHON) -m disastermind run --max-cycles $(MAX_CYCLES)

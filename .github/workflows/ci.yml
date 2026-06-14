@@ -16,7 +16,8 @@
 #   * typecheck  — mypy BLOCKING on the safety-critical core (contracts,
 #                  commander matrix, evacuation, alerting, eval metrics) and
 #                  advisory on the rest; expand the blocking set as it cleans up.
-#   * security   — Trivy filesystem + image scan and a pip-audit of the dep tree.
+#   * security   — Trivy fs + image scan and pip-audit (informational), plus a
+#                  BLOCKING CVE policy gate that fails on a fixable CRITICAL image vuln.
 #   * sbom       — CycloneDX software bill-of-materials, uploaded as an artefact.
 name: ci
 
@@ -133,34 +134,30 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[lint]
 
-      - name: mypy (safety-critical core — BLOCKING)
-        # These packages are mypy-clean today and carry the consequential logic
-        # (contracts, the commander authority matrix, the evacuation decision
-        # layer, alerting, and the evaluation metrics). Regressing their type
-        # surface blocks the merge — the rigor is gated, not advisory.
-        run: >-
-          mypy
-          disastermind/core
-          disastermind/tier1
-          disastermind/evacuation
-          disastermind/alerting
-          disastermind/ml/eval/conformal.py
-          disastermind/ml/eval/decision.py
-          disastermind/ml/eval/metrics.py
+      - name: mypy (type-clean packages — BLOCKING)
+        # The gated set lives in the Makefile (MYPY_GATED) as the single source of
+        # truth, so `make typecheck` runs the same gate locally and in CI. It now
+        # spans 24 packages / ~97 files proven type-clean — the consequential core
+        # (contracts, commander matrix, evacuation, alerting, eval metrics) plus
+        # the prediction/cascade/resource/field tiers, orchestration, persistence,
+        # federation, and more. Regressing any of them blocks the merge.
+        run: make typecheck
 
       - name: mypy (full tree — advisory)
         # The remaining surface is gradually typed; report it without blocking,
-        # and expand the BLOCKING set above as packages reach zero errors.
+        # and grow MYPY_GATED in the Makefile as packages reach zero errors.
         continue-on-error: true
-        run: mypy disastermind/
+        run: make typecheck-advisory
 
   security:
     name: security (trivy + pip-audit)
     runs-on: ubuntu-latest
     needs: test
-    # Scanners can be noisy on transitive advisories; never block the pipeline on
-    # a finding here — the report is the deliverable, triage happens out of band.
-    continue-on-error: true
+    # The broad HIGH+CRITICAL scans below are informational (continue-on-error):
+    # they print the full report and never block on noisy/un-fixable transitive
+    # advisories. The ENFORCING gate is the final step — fixable CRITICALs in the
+    # image fail the build (SECURITY.md gap #8: an actual CVE policy gate, not just
+    # a generated report). Verified green against python:3.13-slim-bookworm.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -207,6 +204,20 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL,HIGH
           exit-code: "0"
+
+      - name: CVE policy gate — fail on fixable CRITICAL (BLOCKING)
+        # The enforced policy: a CRITICAL vulnerability with an available fix must
+        # not ship in the image. `ignore-unfixed` keeps it actionable (no failing
+        # on advisories nobody can patch yet); bump the base image / package to
+        # clear it. This is the gate SECURITY.md gap #8 called for.
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: disastermind:scan
+          format: table
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL
+          exit-code: "1"
 
   sbom:
     name: sbom (cyclonedx)
@@ -262,3 +273,32 @@ jobs:
 
       - name: Smoke-test the image (offline scenario, stdlib-only)
         run: docker run --rm disastermind:ci python -m disastermind simulate B
+
+  frontend:
+    name: frontend (vitest + tsc + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: clients/web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check (tsc)
+        run: npm run type-check
+
+      - name: Unit tests (vitest)
+        run: npm test
+
+      - name: Production build
+        run: npm run build

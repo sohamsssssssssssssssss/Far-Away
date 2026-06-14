@@ -171,8 +171,12 @@ rollout:
    values; rotation means redeploying with new env and is operator-driven.
 6. **Default CORS is `*`.** Convenient for dev, must be narrowed in prod.
 7. **No mTLS / message signing between internal services** (bus, stores).
-8. **No automated dependency / image CVE scanning gate** in CI yet (SBOM is
-   generated but not policy-enforced).
+8. ~~No automated dependency / image CVE scanning gate in CI.~~ **Closed.** CI now
+   enforces a CVE policy gate: a fixable **CRITICAL** vulnerability in the image
+   fails the build (`ignore-unfixed`, so it stays actionable). The broad
+   HIGH+CRITICAL Trivy scans and `pip-audit` remain informational, and the
+   CycloneDX SBOM is still produced. *Remaining:* the policy gates CRITICAL only —
+   tighten to HIGH once the base-image HIGH surface is curated.
 9. **No audit-log encryption at rest or off-host shipping** — integrity is
    protected (hash chain), confidentiality and durability are deployment
    responsibilities.

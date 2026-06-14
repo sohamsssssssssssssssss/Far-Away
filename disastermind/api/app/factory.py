@@ -1,37 +1,10 @@
-"""Thin FastAPI transport for the Commander Dashboard (PRD Step 7 + Step 10).
+"""The FastAPI app assembler: :func:`create_app`.
 
-This is the *transport* half of the dashboard; all policy lives in the
-framework-free :class:`~disastermind.api.service.DashboardService`. FastAPI is an
-optional, heavy dependency, so it is imported **lazily inside**
-:func:`create_app` (HARD RULE 2): importing this module never requires FastAPI
-and never touches the network. Environments without FastAPI still get the full
-:class:`DashboardService` for programmatic / test use.
-
-Endpoints (PRD Step 7 + production hardening):
-  * ``GET  /health``                       — liveness snapshot (back-compat)
-  * ``GET  /healthz``                       — process liveness (always 200 if up)
-  * ``GET  /readyz``                        — readiness (200 only when wired)
-  * ``GET  /metrics``                       — Prometheus text exposition
-  * ``GET  /topics``                       — per-topic message counts
-  * ``GET  /incidents``                    — recent incident roll-up (``?limit=&offset=``)
-  * ``GET  /recent``                       — recent bus messages (``?limit=&offset=``)
-  * ``GET  /escalations``                  — open escalations (``?limit=&offset=``)
-  * ``POST /escalations/{id}/approve``     — human approves -> dispatch
-  * ``POST /escalations/{id}/reject``      — human rejects  -> rejection ACK
-  * ``WS   /ws``                           — live stream of new bus messages (Step 10)
-
-Production middleware (opt-in, inert without FastAPI):
-  * structured per-request logging with an ``X-Request-ID`` (generated if absent,
-    echoed back), and a consistent JSON error envelope via exception handlers;
-  * security headers (``X-Content-Type-Options``, ``X-Frame-Options``,
-    ``Referrer-Policy``, and ``Strict-Transport-Security`` behind TLS).
-
-Pagination is **backward compatible**: ``/incidents``, ``/recent`` and
-``/escalations`` return a bare JSON array by default (no ``limit``/``offset``
-query params), exactly as before. When a caller supplies ``?limit=`` and/or
-``?offset=`` the response becomes the paginated envelope
-``{"items": [...], "total": N, "limit": L, "offset": O}``. This keeps the
-existing clients/tests green while giving new clients real pagination.
+This is the route factory half of the dashboard transport. All policy lives in
+the framework-free :class:`~disastermind.api.service.DashboardService`; this
+module only wires HTTP/WebSocket routes, middleware and exception handlers over
+it. FastAPI is imported **lazily inside** :func:`create_app` (HARD RULE 2) so
+importing this module never requires FastAPI and never touches the network.
 
 NOTE: this module deliberately does **not** use ``from __future__ import
 annotations``. The WebSocket route's ``websocket: WebSocket`` parameter must be
@@ -44,7 +17,6 @@ annotations bind the real local ``WebSocket`` object instead. Python 3.10+ PEP
 604 unions (``X | None``) used below evaluate natively at runtime.
 """
 import asyncio
-import logging
 import os
 import threading
 import time
@@ -52,153 +24,20 @@ import uuid
 from json import JSONDecodeError
 from typing import Any
 
-from ..audit.decision_log import DecisionLogger
-from ..core.bus import InMemoryBus, MessageBus
-from ..core.config import Settings
-from .service import DashboardService
-
-log = logging.getLogger("disastermind.api.request")
-
-# A "default large" limit so that an unpaginated list view still returns the full
-# recent window rather than truncating. Callers that pass ``?limit=`` override it.
-_DEFAULT_PAGE_LIMIT = 1000
-
-# Versioned mount prefix. Every data route is registered both unversioned (legacy
-# back-compat alias) AND under this prefix (``/v1/...``) so new clients can pin a
-# version while existing clients/tests keep working unchanged.
-_API_V1 = "/v1"
-
-# Generous default request-body ceiling (bytes). The dashboard's POSTs are tiny
-# (approve/reject carry only query params), so this guards against accidental or
-# hostile oversize bodies without ever clipping a legitimate request. Overridable
-# via ``DM_MAX_BODY``.
-_DEFAULT_MAX_BODY = 1 * 1024 * 1024  # 1 MiB
-
-# WebSocket hardening defaults (overridable via env). A server-side heartbeat ping
-# every ``DM_WS_PING`` seconds prunes dead/half-open clients; ``DM_WS_MAX`` caps
-# concurrent live connections so a connection flood cannot exhaust the box.
-_DEFAULT_WS_PING = 20.0
-_DEFAULT_WS_MAX = 256
-
-
-def _env_int(key: str, default: int) -> int:
-    """Read a positive integer env var, falling back to ``default`` on any error."""
-    raw = os.environ.get(key)
-    if raw is None or not raw.strip():
-        return default
-    try:
-        val = int(raw.strip())
-    except (TypeError, ValueError):
-        return default
-    return val if val > 0 else default
-
-
-def _env_float(key: str, default: float) -> float:
-    """Read a positive float env var, falling back to ``default`` on any error."""
-    raw = os.environ.get(key)
-    if raw is None or not raw.strip():
-        return default
-    try:
-        val = float(raw.strip())
-    except (TypeError, ValueError):
-        return default
-    return val if val > 0 else default
-
-
-def _is_json_decode(exc: Any) -> bool:
-    """True if a validation error was actually caused by unparseable JSON.
-
-    FastAPI surfaces a malformed request body as a :class:`RequestValidationError`
-    whose underlying cause is a :class:`json.JSONDecodeError`. We sniff both the
-    direct cause chain and the per-error ``type``/``msg`` so we can return a clear
-    400 ``invalid_json`` instead of an opaque 422 schema error.
-    """
-    cause = getattr(exc, "__cause__", None)
-    if isinstance(cause, JSONDecodeError):
-        return True
-    errors = getattr(exc, "errors", None)
-    try:
-        rows = errors() if callable(errors) else []
-    except Exception:  # pragma: no cover - defensive
-        return False
-    for row in rows or []:
-        if not isinstance(row, dict):
-            continue
-        if row.get("type") in ("json_invalid", "value_error.jsondecode"):
-            return True
-        ctx_err = (row.get("ctx") or {}).get("error")
-        if isinstance(ctx_err, JSONDecodeError):
-            return True
-    return False
-
-
-def _find_persisted_storage(loop: Any) -> Any:
-    """Return the StatePersistor's ``Storage`` facade if a persistor is wired.
-
-    The history endpoints prefer a durable store: we locate the ``persistence.state``
-    agent on ``loop.agents`` (the :class:`~disastermind.persistence.persistor.StatePersistor`)
-    and hand back its ``.storage``. Returns ``None`` when no loop/persistor exists,
-    in which case the routes fall back to the in-memory :class:`DashboardService`.
-    """
-    for agent in list(getattr(loop, "agents", []) or []):
-        if getattr(agent, "name", "") == "persistence.state":
-            storage = getattr(agent, "storage", None)
-            if storage is not None:
-                return storage
-    return None
-
-
-def build_service(
-    bus: MessageBus | None = None,
-    logger: DecisionLogger | None = None,
-    settings: Settings | None = None,
-) -> DashboardService:
-    """Wire a full DisasterMind system and return a :class:`DashboardService`.
-
-    Lazily imports :func:`disastermind.orchestration.build.build_system` so this
-    module stays cheap to import. Falls back to a bare in-memory bus + a stub
-    commander if orchestration is unavailable (PRD Step 10 graceful degradation).
-    """
-    bus = bus or InMemoryBus()
-    logger = logger or DecisionLogger.null()
-    settings = settings or Settings()
-    commander: Any = None
-    try:
-        from ..orchestration.build import build_system
-
-        loop = build_system(bus=bus, logger=logger, settings=settings)
-        commander = getattr(loop, "commander", None)
-    except Exception:  # pragma: no cover - defensive boot path (Step 10)
-        commander = None
-    if commander is None:  # last-ditch fallback so the dashboard still serves
-        from ..tier1.commander.agent import CommanderAgent
-
-        commander = CommanderAgent(bus=bus, logger=logger, settings=settings)
-    service = DashboardService(bus=bus, commander=commander)
-    service.start_streaming()
-    return service
-
-
-# --------------------------------------------------------------------- pagination
-def _paginate(
-    rows: list[dict[str, Any]],
-    limit: int | None,
-    offset: int | None,
-) -> Any:
-    """Return ``rows`` either as a bare list (legacy) or a paginated envelope.
-
-    Backward compatible: when BOTH ``limit`` and ``offset`` are ``None`` the
-    caller asked for the legacy shape and we return the list unchanged. As soon
-    as either query parameter is supplied we return
-    ``{"items", "total", "limit", "offset"}`` over the full ``rows`` set.
-    """
-    if limit is None and offset is None:
-        return rows
-    total = len(rows)
-    off = max(0, int(offset)) if offset is not None else 0
-    lim = _DEFAULT_PAGE_LIMIT if limit is None else max(0, int(limit))
-    window = rows[off : off + lim]
-    return {"items": window, "total": total, "limit": lim, "offset": off}
+from ...core.config import Settings
+from ..service import DashboardService
+from ._constants import (
+    _API_V1,
+    _DEFAULT_MAX_BODY,
+    _DEFAULT_PAGE_LIMIT,
+    _DEFAULT_WS_MAX,
+    _DEFAULT_WS_PING,
+)
+from ._env import _env_float, _env_int
+from ._errors import _is_json_decode
+from ._persistence import _find_persisted_storage
+from .pagination import _paginate
+from .service import build_service, log
 
 
 def create_app(
@@ -276,7 +115,7 @@ def create_app(
         readiness verdict untouched and never raises.
         """
         try:
-            from ..ops.health import readiness as _readiness
+            from ...ops.health import readiness as _readiness
 
             report = _readiness(loop)
         except Exception:  # pragma: no cover - defensive: never take the box down
@@ -306,7 +145,7 @@ def create_app(
         if not persist_on:
             return
         try:
-            from ..integrations.health import DOWN, ping_backends
+            from ...integrations.health import DOWN, ping_backends
 
             settings = getattr(loop, "settings", None) or Settings()
             statuses = ping_backends(settings)
@@ -324,7 +163,7 @@ def create_app(
     def metrics() -> Any:
         """Prometheus text exposition from the wired MetricsCollector (Step 9)."""
         try:
-            from ..observability.exposition import render
+            from ...observability.exposition import render
 
             body = render(collector) if collector is not None else ""
         except Exception:  # pragma: no cover - never let scraping crash the box
@@ -396,7 +235,7 @@ def create_app(
         """
         if "data" not in _cyclone_cache:
             try:
-                from ..hindcast.cyclone_backtest import run_national_backtest
+                from ...hindcast.cyclone_backtest import run_national_backtest
 
                 _cyclone_cache["data"] = run_national_backtest().to_dict()
             except Exception:  # pragma: no cover - never take the box down
@@ -416,7 +255,7 @@ def create_app(
         Returns ``{markdown, report, narrative, narrative_source}``.
         """
         try:
-            from ..reporting import IncidentReporter
+            from ...reporting import IncidentReporter
 
             bus = getattr(loop, "bus", None)
             lg = getattr(loop, "logger", None)
@@ -438,7 +277,7 @@ def create_app(
             "SHAP-attributed predictions."
         )
         try:
-            from ..llm.client import make_client
+            from ...llm.client import make_client
 
             client = make_client(getattr(loop, "settings", None))
             if getattr(client, "name", "template") == "anthropic":
@@ -483,7 +322,7 @@ def create_app(
         )
         prompt = (system + "\n\n" + user).strip()
         try:
-            from ..llm.client import make_client
+            from ...llm.client import make_client
 
             client = make_client(getattr(loop, "settings", None))
             if getattr(client, "name", "template") != "anthropic":
